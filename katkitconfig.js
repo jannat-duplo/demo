@@ -17,7 +17,7 @@
                 "BuildParams": "PHASE=DEPLOY",
                 "Order": 1,
                 "Parallelism": 1,
-                "ContinerImage": null
+                "ContinerImage": "nginx:latest"
             }
         ]
     }
