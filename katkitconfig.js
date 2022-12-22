@@ -9,7 +9,7 @@
                 "BuildParams": "PHASE=PRE_DEPLOY_BUILD, FOO=BAR",
                 "Order": 0,
                 "Parallelism": 1,
-                "ContinerImage": "nginx:latest"
+                "ContainerImage": "nginx:latest"
             },
             {
                 "Name": "DEPLOY",
@@ -17,7 +17,7 @@
                 "BuildParams": "PHASE=DEPLOY",
                 "Order": 1,
                 "Parallelism": 1,
-                "ContinerImage": "nginx:latest"
+                "ContainerImage": "nginx:latest"
             }
         ]
     }
