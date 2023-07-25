@@ -6,14 +6,14 @@ on:
 jobs:
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
-    name: Deploy with DuploCloud1
+    name: Deploy with DuploCloud
     runs-on: ubuntu-latest
     steps:
       - name: aws-jit
         uses: duplocloud/ghactions-aws-jit@master
         with:
           duplo_host: https://qa-govcloud.duplocloud.net
-          duplo_token: ${{ secrets.DUPLO_TOKEN }}
+          duplo_token: INVALID
           tenant: default
       - name: list-s3
         run: aws s3 ls
