@@ -6,7 +6,7 @@ on:
 jobs:
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
-    name: Deploy with DuploCloud
+    name: Deploy with DuploCloud1
     runs-on: ubuntu-latest
     steps:
       - name: aws-jit
