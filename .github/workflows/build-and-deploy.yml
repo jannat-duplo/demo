@@ -2,7 +2,7 @@ name: Build and Deploy
 on:
   push:
     branches:
-      - develop # branch to trigger on
+      - master # branch to trigger on
 jobs:
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
