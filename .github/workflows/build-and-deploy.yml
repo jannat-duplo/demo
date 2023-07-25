@@ -13,7 +13,7 @@ jobs:
         uses: duplocloud/ghactions-aws-jit@master
         with:
           duplo_host: https://qa-govcloud.duplocloud.net
-          duplo_token: INVALID
+          duplo_token: ${{ secrets.DUPLO_TOKEN }}
           tenant: default
       - name: list-s3
         run: aws s3 ls
