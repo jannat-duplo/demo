@@ -6,11 +6,11 @@ on:
 jobs:
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
-    name: Deploy with DuploCloud
+    name: Deploy with DuploCloud1
     runs-on: ubuntu-latest
     steps:
       - name: aws-jit
-        uses: duplocloud/ghactions-aws-jit@master
+        uses: duplocloud/ghactions-aws-jit@release/0.3.3
         with:
           duplo_host: https://qa-govcloud.duplocloud.net
           duplo_token: ${{ secrets.DUPLO_TOKEN }}
