@@ -12,7 +12,6 @@ jobs:
       - name: aws-jit
         uses: duplocloud/ghactions-aws-jit@master
         with:
-          admin: true
           aws_region: ap-east-1
           duplo_host: https://qa-aws.duplocloud.net
           duplo_token: {SECRET_TOKEN}
