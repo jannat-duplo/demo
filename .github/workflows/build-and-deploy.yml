@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: aws-jit
-        uses: duplocloud/ghactions-aws-jit@release/0.3.2
+        uses: duplocloud/ghactions-aws-jit@master
         with:
           duplo_host: https://qa-aws.duplocloud.net
           duplo_token: INVALID
