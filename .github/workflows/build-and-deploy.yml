@@ -24,5 +24,5 @@ jobs:
         with:
           admin: true
           aws_region: ap-east-1
-      - name: list-s3
-        run: aws s3 ls
+      - name: list-vpc
+        run: aws ec2 describe-vpcs
