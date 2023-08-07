@@ -16,4 +16,4 @@ jobs:
           duplo_token: INVALID
           tenant: default
       - name: list-s3
-        run: aws s3 ls
+        run: aws s3 ls --region ap-east-1
