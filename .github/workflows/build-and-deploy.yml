@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - master # branch to trigger on1
+env:
+  duplo_host: https://qa-aws.duplocloud.net
+  duplo_token: ${{ secrets.DUPLO_TOKEN }}
 jobs:
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
