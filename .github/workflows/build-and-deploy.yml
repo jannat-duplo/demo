@@ -19,10 +19,10 @@ jobs:
           duplo_host: https://qa-aws.duplocloud.net
           duplo_token: ${{ secrets.DUPLO_TOKEN }}
           tenant: hk-t1
-      - name: list-s3
-        run: aws s3 ls
       - name: AWS HongKong - Login
         uses: duplocloud/ghactions-aws-jit@master
         with:
           admin: true
           aws_region: ap-east-1
+      - name: list-s3
+        run: aws s3 ls
