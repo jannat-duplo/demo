@@ -10,9 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: aws-jit
-        uses: duplocloud/ghactions-aws-jit
+        uses: duplocloud/ghactions-aws-jit@release/latest
         with:
-          duplo_host: https://qa-govcloud.duplocloud.net
+          duplo_host: https://qa-aws.duplocloud.net
           duplo_token: INVALID
           tenant: default
       - name: list-s3
