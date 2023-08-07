@@ -17,4 +17,4 @@ jobs:
           duplo_token: ${{ secrets.DUPLO_TOKEN }}
           tenant: default
       - name: list-s3
-        run: aws s3 ls --region us-west-2
+        run: aws s3 ls
