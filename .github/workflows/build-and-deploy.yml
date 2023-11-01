@@ -26,10 +26,3 @@ jobs:
           aws_region: us-west-2
       - name: list-vpc
         run: aws ec2 describe-vpcs
-      - name: AWS us-west-2 - Login
-        uses: duplocloud/ghactions-aws-jit@0.3.3
-        with:
-          admin: true
-          aws_region: us-west-2
-      - name: list-vpc
-        run: aws ec2 describe-vpcs
