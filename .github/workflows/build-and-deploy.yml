@@ -32,5 +32,5 @@ jobs:
           tenant: "sa0310-1"
           services: |-
             [
-              { "Name": "test01  ", "Image": " nginx :latest111" }
+              { "Name": "test01", "Image": "nginx :latest111" }
             ]
