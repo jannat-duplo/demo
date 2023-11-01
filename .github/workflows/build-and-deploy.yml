@@ -32,5 +32,5 @@ jobs:
           tenant: "sa0310-1"
           services: |-
             [
-              { "Name": "tolerate", "Image": "nginx:latest" }
+              { "Name": "filebeat-duploinfrasvc", "Image": "nginx:latest" }
             ]
