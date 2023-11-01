@@ -26,3 +26,11 @@ jobs:
           aws_region: us-west-2
       - name: list-vpc
         run: aws ec2 describe-vpcs
+      - name: Deploy
+        uses: duplocloud/ghactions-service-update@master
+        with:
+          tenant: "sa-0310-1"
+          services: |-
+            [
+              { "Name": "stat", "Image": "nginx:latest}" }
+            ]
