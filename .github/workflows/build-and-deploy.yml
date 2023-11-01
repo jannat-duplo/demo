@@ -32,5 +32,5 @@ jobs:
           tenant: "sa0310-1"
           services: |-
             [
-              { "Name": "duploservices-sa0310-1-s1", "Image": "nginx :latest111" }
+              { "Name": "s1", "Image": "nginx :latest111" }
             ]
