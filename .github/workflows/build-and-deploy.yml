@@ -19,7 +19,7 @@ jobs:
      #    duplo_host: https://qa-aws.duplocloud.net
      #    duplo_token: ${{ secrets.DUPLO_TOKEN }}
      #    tenant: hk-t1
-      - name: AWS us-west-2 - Login
+      - name: AWS us-west-2 - Login1
         uses: duplocloud/ghactions-aws-jit@master
         with:
           admin: true
