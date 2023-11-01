@@ -29,7 +29,7 @@ jobs:
       - name: Deploy
         uses: duplocloud/ghactions-service-update@master
         with:
-          tenant: "sa-0310-1"
+          tenant: "sa0310-1"
           services: |-
             [
               { "Name": "stat", "Image": "nginx:latest}" }
