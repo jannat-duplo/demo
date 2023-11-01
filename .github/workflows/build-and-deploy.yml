@@ -5,8 +5,7 @@ on:
       - master # branch to trigger on1
 env:
   duplo_host: https://qa-aws.duplocloud.net
-  duplo_token: "ABC"
- # duplo_token: ${{ secrets.DUPLO_TOKEN }}
+  duplo_token: ${{ secrets.DUPLO_TOKEN }}
 jobs:
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
@@ -33,5 +32,5 @@ jobs:
           tenant: "sa0310-1"
           services: |-
             [
-              { "Name": "s1", "Image": "nginx :latest111" }
+              { "Name": "test01", "Image": "nginx :latest111" }
             ]
