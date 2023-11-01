@@ -23,6 +23,6 @@ jobs:
         uses: duplocloud/ghactions-aws-jit@master
         with:
           admin: true
-          aws_region: ap-east-1
+          aws_region: us-west-2
       - name: list-vpc
         run: aws ec2 describe-vpcs
