@@ -21,7 +21,7 @@ jobs:
          aws_region: us-east-2 #ap-east-1
          duplo_host: https://qa-aws.duplocloud.net
          duplo_token: ${{ secrets.DUPLO_TOKEN }}
-         tenant: $TENANT_NAME
+         tenant: "new-t1"
       - name: AWS us-west-2 - Logintest
         uses: duplocloud/ghactions-aws-jit@master
         with:
