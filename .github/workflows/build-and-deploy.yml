@@ -6,6 +6,9 @@ on:
 env:
   duplo_host: https://qa-aws.duplocloud.net
   duplo_token: ${{ secrets.DUPLO_TOKEN }}
+  TENANT_NAME: new-t1				# DuploCloud Tenant name
+  DUPLO_TENANT_ID: 368a1837-315b-4e92-8873-d523d6c4691d		# DuploCloud Tenant Id where lambda is deployed
+  LAMBDA_NAME: mylambda	
 jobs:
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
@@ -15,7 +18,7 @@ jobs:
       - name: aws-jit
         uses: duplocloud/ghactions-aws-jit@master
         with:
-         aws_region: ap-east-1
+         aws_region: us-east-2 #ap-east-1
          duplo_host: https://qa-aws.duplocloud.net
          duplo_token: ${{ secrets.DUPLO_TOKEN }}
          tenant: hk-t1
@@ -40,6 +43,6 @@ jobs:
               -H "Authorization: Bearer $duplo_token" -XPOST \
               "${duplo_host}/subscriptions/$DUPLO_TENANT_ID/UpdateLambdaFunction" \
               -d "{
-                'FunctionName': 'duploservices-new-t1-$LAMBDA_NAME',
-                'ImageUri': \"${{ needs.build.outputs.image }}\"
+                'FunctionName': 'duploservices-$TENANT_NAME-$LAMBDA_NAME',
+                'ImageUri': "test1222"
             }"
