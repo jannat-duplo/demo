@@ -20,14 +20,14 @@ jobs:
      #    duplo_token: ${{ secrets.DUPLO_TOKEN }}
      #    tenant: hk-t1
       - name: AWS us-west-2 - Logintest
-        uses: duplocloud/ghactions-aws-jit@develop
+        uses: duplocloud/ghactions-aws-jit@master
         with:
           admin: true
           aws_region: us-west-2
       - name: list-vpc
         run: aws ec2 describe-vpcs
       - name: Deploy
-        uses: duplocloud/ghactions-service-update@develop
+        uses: duplocloud/ghactions-service-update@master
         with:
           tenant: "new-t1"
           services: |-
