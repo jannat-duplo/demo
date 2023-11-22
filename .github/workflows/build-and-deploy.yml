@@ -34,3 +34,12 @@ jobs:
             [
               { "Name": "s1", "Image": "nginx" }
             ]
+       - name: Deploy Lambda
+        run: |
+            curl -Ssf -H 'Content-type: application/json' \
+              -H "Authorization: Bearer $duplo_token" -XPOST \
+              "${duplo_host}/subscriptions/$DUPLO_TENANT_ID/UpdateLambdaFunction" \
+              -d "{
+                'FunctionName': 'duploservices-new-t1-$LAMBDA_NAME',
+                'ImageUri': \"${{ needs.build.outputs.image }}\"
+            }"
