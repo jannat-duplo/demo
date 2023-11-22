@@ -40,9 +40,9 @@ jobs:
       - name: Deploy Lambda
         run: |
             curl -Ssf -H 'Content-type: application/json' \
-              -H "Authorization: Bearer $duplo_token" -XPOST \
-              "https://${{env.duplo_host}}/subscriptions/368a1837-315b-4e92-8873-d523d6c4691d/${{env.LAMBDA_NAME}}" \
+              -H "Authorization: Bearer ${{env.duplo_token}}" -XPOST \
+              "${{env.duplo_host}}/subscriptions/${{env.DUPLO_TENANT_ID}}/UpdateLambdaFunction" \
               -d "{
-                   'FunctionName': 'duploservices-new-t1-mylambda',
+                   'FunctionName': 'duploservices-${{env.TENANT_NAME}}-${{env.LAMBDA_NAME}}',
                 'ImageUri': "test1222"
             }"
