@@ -35,7 +35,7 @@ jobs:
           tenant: "new-t1"
           services: |-
             [
-              { "Name": "s1", "Image": "nginx" }
+              { "Name": "s1", "Image": "nginx:latest" }
             ]
       - name: Deploy Lambda
         run: |
