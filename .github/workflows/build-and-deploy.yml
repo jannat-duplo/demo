@@ -21,7 +21,7 @@ jobs:
          aws_region: us-east-2 #ap-east-1
          duplo_host: https://qa-aws.duplocloud.net
          duplo_token: ${{ secrets.DUPLO_TOKEN }}
-         tenant: "new-t1"
+         tenant: "${{ env.TENANT_NAME }}"
       - name: AWS us-west-2 - Logintest
         uses: duplocloud/ghactions-aws-jit@master
         with:
@@ -32,7 +32,7 @@ jobs:
       - name: Deploy
         uses: duplocloud/ghactions-service-update@master
         with:
-          tenant: "new-t1"
+          tenant: "${{ env.TENANT_NAME }}"
           services: |-
             [
               { "Name": "s1", "Image": "nginx:latest" }
@@ -43,6 +43,6 @@ jobs:
               -H "Authorization: Bearer $duplo_token" -XPOST \
               "${duplo_host}/subscriptions/$DUPLO_TENANT_ID/UpdateLambdaFunction" \
               -d "{
-                  'FunctionName': 'duploservices-1-$LAMBDA_NAME',
+                   'FunctionName': 'duploservices-$TENANT_NAME-$LAMBDA_NAME',
                 'ImageUri': "test1222"
             }"
