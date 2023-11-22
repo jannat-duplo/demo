@@ -43,6 +43,6 @@ jobs:
               -H "Authorization: Bearer $duplo_token" -XPOST \
               "${duplo_host}/subscriptions/$DUPLO_TENANT_ID/UpdateLambdaFunction" \
               -d "{
-                   'FunctionName': 'duploservices-$TENANT_NAME-$LAMBDA_NAME',
+                   'FunctionName': 'duploservices-new-t1-mylambda',
                 'ImageUri': "test1222"
             }"
