@@ -12,13 +12,13 @@ jobs:
     name: Deploy with DuploCloud
     runs-on: ubuntu-latest
     steps:
-     # - name: aws-jit
-     #  uses: duplocloud/ghactions-aws-jit@master
-     #   with:
-     #     aws_region: ap-east-1
-     #    duplo_host: https://qa-aws.duplocloud.net
-     #    duplo_token: ${{ secrets.DUPLO_TOKEN }}
-     #    tenant: hk-t1
+      - name: aws-jit
+        uses: duplocloud/ghactions-aws-jit@master
+        with:
+         aws_region: ap-east-1
+         duplo_host: https://qa-aws.duplocloud.net
+         duplo_token: ${{ secrets.DUPLO_TOKEN }}
+         tenant: hk-t1
       - name: AWS us-west-2 - Logintest
         uses: duplocloud/ghactions-aws-jit@master
         with:
@@ -34,7 +34,7 @@ jobs:
             [
               { "Name": "s1", "Image": "nginx" }
             ]
-       - name: Deploy Lambda
+      - name: Deploy Lambda
         run: |
             curl -Ssf -H 'Content-type: application/json' \
               -H "Authorization: Bearer $duplo_token" -XPOST \
