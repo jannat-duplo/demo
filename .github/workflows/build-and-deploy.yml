@@ -41,7 +41,7 @@ jobs:
         run: |
             curl -Ssf -H 'Content-type: application/json' \
               -H "Authorization: Bearer ${duplo_token}" -XPOST \
-              "https:/${duplo_host}/subscriptions/368a1837-315b-4e92-8873-d523d6c4691d/UpdateLambdaFunction" \
+              "https://${duplo_host}/subscriptions/368a1837-315b-4e92-8873-d523d6c4691d/UpdateLambdaFunction" \
               -d "{
                    'FunctionName': 'duploservices-new-t1-mylambda',
                 'ImageUri': "test1222"
