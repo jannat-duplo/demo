@@ -44,5 +44,5 @@ jobs:
               "${{env.duplo_host}}/subscriptions/${{env.DUPLO_TENANT_ID}}/UpdateLambdaFunction" \
               -d "{
                    'FunctionName': 'duploservices-${{env.TENANT_NAME}}-${{env.LAMBDA_NAME}}',
-                'ImageUri': "test1222"
+                'ImageUri': "884446924812.dkr.ecr.us-east-2.amazonaws.com/numpy-lambda-container-automation:latest"
             }"
