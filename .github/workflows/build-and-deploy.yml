@@ -6,7 +6,7 @@ on:
 env:
   duplo_host: https://qa-aws.duplocloud.net
   duplo_token: ${{ secrets.DUPLO_TOKEN }}
-  TENANT_NAME: new-t1				# DuploCloud Tenant name
+  TENANT_NAME: shared-job				# DuploCloud Tenant name
   DUPLO_TENANT_ID: 7e7b3c2d-1d75-4cba-bb94-44701a5912da	# DuploCloud Tenant Id where lambda is deployed
   LAMBDA_NAME: mylambda	
 jobs:
