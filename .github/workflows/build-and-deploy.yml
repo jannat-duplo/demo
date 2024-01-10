@@ -35,7 +35,8 @@ jobs:
           tenant: "${{ env.TENANT_NAME }}"
           services: |-
             [
-              { "Name": "tg-only", "Image": "nginx:stable" }
+              { "Name": "tg-only", "Image": "nginx:stable1" },
+              { "Name": "shared-service", "Image": "nginx:stable" }
             ]
       - name: Deploy Lambda
         run: |
