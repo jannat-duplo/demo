@@ -6,8 +6,8 @@ on:
 env:
   duplo_host: https://qa-aws.duplocloud.net
   duplo_token: ${{ secrets.DUPLO_TOKEN }}
-  TENANT_NAME: shared-job				# DuploCloud Tenant name
-  DUPLO_TENANT_ID: 7e7b3c2d-1d75-4cba-bb94-44701a5912da	# DuploCloud Tenant Id where lambda is deployed
+  TENANT_NAME: jt-1202-1				# DuploCloud Tenant name
+  DUPLO_TENANT_ID: e94226ab-a177-488b-ac72-13d24019bc37	# DuploCloud Tenant Id where lambda is deployed
   LAMBDA_NAME: mylambda	
 jobs:
   deploy:
@@ -35,8 +35,8 @@ jobs:
           tenant: "${{ env.TENANT_NAME }}"
           services: |-
             [
-              { "Name": "tg-only", "Image": "nginx:stable1" },
-              { "Name": "shared-service", "Image": "nginx:stable" }
+              { "Name": "serv3", "Image": "nginx:stable1" },
+              { "Name": "serv2-health", "Image": "nginx:stable" }
             ]
       - name: Deploy Lambda
         run: |
