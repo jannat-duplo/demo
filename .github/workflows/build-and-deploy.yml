@@ -30,6 +30,10 @@ jobs:
     # This example get AWS credentials, then lists all S3 buckets.
     name: Deploy with DuploCloud
     runs-on: ubuntu-latest
+    env:
+      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+      DUPLO_HOST: https://qa-aws.duplocloud.net
+      TENANT_NAME: sa0feb1
     steps:
       - name: aws-jit
         uses: duplocloud/ghactions-aws-jit@master
