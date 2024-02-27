@@ -1,14 +1,18 @@
-name: Build and Deploy
-on:
-  push:
-    branches:
-      - master # branch to trigger on1
-env:
-  duplo_host: https://qa-aws.duplocloud.net
-  duplo_token: ${{ secrets.DUPLO_TOKEN }}
-  TENANT_NAME: sa0feb1				# DuploCloud Tenant name
-  DUPLO_TENANT_ID: 2ee5692a-71cf-4565-a792-0502e13d7a32 # DuploCloud Tenant Id where lambda is deployed
-  LAMBDA_NAME: duploservices-sa0feb1-l01	
+name: Update Service
+
+on: 
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: The environment to deploy to
+        type: environment
+        default: dev
+        required: true
+      image:
+        description: The full image
+        type: string
+        required: true
+
 jobs:
   update_service:
     name: Update Service
@@ -17,16 +21,17 @@ jobs:
       name: ${{ inputs.environment }}
     env:
       DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
-      DUPLO_TENANT: ${{ vars.TENANT_NAME }}
+      DUPLO_HOST: https://qa-aws.duplocloud.net
+      DUPLO_TENANT: sa0feb1
     steps: 
     
     # install and login to the cloud
     - name: Duplo Setup
-      uses: duplocloud/actions/setup@v0.0.3
+      uses: duplocloud/actions/setup@main
 
     # uses duploctl from above
     - name: Update Service
-      uses: duplocloud/actions/update-service@v0.0.3
+      uses: duplocloud/actions/update-service@main
       with:
-        service: my-service
-        image: and:image
+        service: s1
+        image: nginx:latest
