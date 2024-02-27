@@ -6,7 +6,7 @@ on:
 env:
   duplo_host: https://qa-aws.duplocloud.net
   duplo_token: ${{ secrets.DUPLO_TOKEN }}
-  TENANT_NAME: jt-1202-1				# DuploCloud Tenant name
+  TENANT_NAME: sa0feb1				# DuploCloud Tenant name
   DUPLO_TENANT_ID: e94226ab-a177-488b-ac72-13d24019bc37	# DuploCloud Tenant Id where lambda is deployed
   LAMBDA_NAME: mylambda	
 jobs:
@@ -17,8 +17,8 @@ jobs:
       name: ${{ inputs.environment }}
     env:
       DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
-      DUPLO_HOST: ${{ var.DUPLO_HOST }}
-      DUPLO_TENANT: sa0feb1
+      DUPLO_HOST: ${{ env.DUPLO_HOST }}
+      DUPLO_TENANT: ${{ env.TENANT_NAME }}
     steps: 
     
     # install and login to the cloud
@@ -40,9 +40,9 @@ jobs:
         uses: duplocloud/ghactions-aws-jit@master
         with:
          aws_region: us-east-2 #ap-east-1
-         duplo_host: ${{ var.DUPLO_HOST }}
+         duplo_host: ${{ env.DUPLO_HOST }}
          duplo_token: ${{ secrets.DUPLO_TOKEN }}
-         tenant: "${{ env.DUPLO_TENANT }}"
+         tenant: ${{ env.DUPLO_TENANT }}
       - name: AWS us-west-2 - Logintest
         uses: duplocloud/ghactions-aws-jit@master
         with:
