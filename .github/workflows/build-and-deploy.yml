@@ -3,6 +3,10 @@ on:
   push:
     branches:
       - master # branch to trigger on
+env:
+  duplo_host: https://qa-aws.duplocloud.net
+  duplo_token: ${{ secrets.DUPLO_TOKEN }}
+  TENANT_NAME: sa0feb1			# DuploCloud Tenant name
 
 jobs:
   update_service:
@@ -10,10 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: 
       name: ${{ inputs.environment }}
-    env:
-      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
-      DUPLO_HOST: https://qa-aws.duplocloud.net
-      DUPLO_TENANT: sa0feb1
+   # env:
+   #   DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+   #   DUPLO_HOST: https://qa-aws.duplocloud.net
+    #  DUPLO_TENANT: sa0feb1
     steps: 
     
     # install and login to the cloud
@@ -30,10 +34,6 @@ jobs:
     # This example get AWS credentials, then lists all S3 buckets.
     name: Deploy with DuploCloud
     runs-on: ubuntu-latest
-    env:
-      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
-      DUPLO_HOST: https://qa-aws.duplocloud.net
-      TENANT_NAME: sa0feb1
     steps:
       - name: aws-jit
         uses: duplocloud/ghactions-aws-jit@master
