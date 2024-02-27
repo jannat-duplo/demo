@@ -10,7 +10,7 @@ env:
 
 jobs:
   update_service:
-    name: Update Service using DUploCtl
+    name: Update Service using DuploCtl
     runs-on: ubuntu-latest
     environment: 
       name: ${{ inputs.environment }}
@@ -32,7 +32,7 @@ jobs:
         image: nginx:latest1
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
-    name: Deploy with DuploCloud
+    name: using GHA Jit update multiple services
     runs-on: ubuntu-latest
     steps:
       - name: aws-jit
@@ -58,3 +58,38 @@ jobs:
               { "Name": "s1", "Image": "nginx:stable1" },
               { "Name": "tag2", "Image": "nginx:stable" }
             ]      
+  run-k8s-job:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@main
+    - name: Build Job
+        shell: bash
+        run: |
+          cat <<EOF > job.yaml
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: my-job
+            namespace: duploservices-sa0feb1
+          spec:
+            backoffLimit: 4
+            parallelism: 1
+            template:
+              spec:
+                restartPolicy: Never
+                nodeSelector:
+                  tenantname: duploservices-sa0feb1
+                containers:
+                - name: app
+                  image: alpine:latest
+                  command: 
+                  - /bin/sh
+                  - -c
+                  args:
+                  - |
+                    echo "Hello World, I'm in Kubernetes!"
+          EOF
+
+      - name: Apply and Watch
+        uses: duplocloud/actions/k8s-job@main
