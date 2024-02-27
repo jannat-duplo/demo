@@ -49,8 +49,8 @@ jobs:
                 'ImageUri': "884446924812.dkr.ecr.us-east-2.amazonaws.com/numpy-lambda-container-automation:latest"
             }"
        # install and login to the cloud
-       - name: Duplo Setup
-         uses: duplocloud/actions/setup@main
+      - name: Duplo Setup
+        uses: duplocloud/actions/setup@main
 
       - name: Update Service
         uses: duplocloud/actions/update-service@v1
