@@ -26,3 +26,31 @@ jobs:
       with:
         service: statefulset
         image: nginx:latest1
+  deploy:
+    # This example get AWS credentials, then lists all S3 buckets.
+    name: Deploy with DuploCloud
+    runs-on: ubuntu-latest
+    steps:
+      - name: aws-jit
+        uses: duplocloud/ghactions-aws-jit@master
+        with:
+         aws_region: us-east-2 #ap-east-1
+         duplo_host: https://qa-aws.duplocloud.net
+         duplo_token: ${{ secrets.DUPLO_TOKEN }}
+         tenant: sa0feb1
+      - name: AWS us-west-2 - Logintest
+        uses: duplocloud/ghactions-aws-jit@master
+        with:
+          admin: true
+          aws_region: us-west-2
+      - name: list-vpc
+        run: aws ec2 describe-vpcs
+      - name: Deploy
+        uses: duplocloud/ghactions-service-update@master
+        with:
+          tenant: "${{ env.TENANT_NAME }}"
+          services: |-
+            [
+              { "Name": "s1", "Image": "nginx:stable1" },
+              { "Name": "tag2", "Image": "nginx:stable" }
+            ]      
