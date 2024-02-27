@@ -64,8 +64,8 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@main
     - name: Build Job
-        shell: bash
-        run: |
+      shell: bash
+      run: |
           cat <<EOF > job.yaml
           apiVersion: batch/v1
           kind: Job
