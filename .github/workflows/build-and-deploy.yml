@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@main
+      uses: duplocloud/actions/checkout@main
     - name: Build Job
       shell: bash
       run: |
