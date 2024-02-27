@@ -10,15 +10,23 @@ env:
   DUPLO_TENANT_ID: 2ee5692a-71cf-4565-a792-0502e13d7a32 # DuploCloud Tenant Id where lambda is deployed
   LAMBDA_NAME: duploservices-sa0feb1-l01	
 jobs:
-  deploy:
+  update_service:
+    name: Update Service
     runs-on: ubuntu-latest
-
-    steps:
+    environment: 
+      name: ${{ inputs.environment }}
+    env:
+      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+      DUPLO_TENANT: ${{ vars.TENANT_NAME }}
+    steps: 
+    
+    # install and login to the cloud
     - name: Duplo Setup
-      uses: duplocloud/actions/setup@main
+      uses: duplocloud/actions/setup@v0.0.3
 
+    # uses duploctl from above
     - name: Update Service
-      uses: duplocloud/actions/update-service@main
+      uses: duplocloud/actions/update-service@v0.0.3
       with:
         service: my-service
-        image: my-image:latest
+        image: and:image
