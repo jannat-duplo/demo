@@ -22,11 +22,6 @@ jobs:
     # install and login to the cloud
     - name: Duplo Setup
       uses: duplocloud/actions/setup@v0.0.3
-      # only required on gcp and azure
-      with:
-        account-id: ${{ vars.CLOUD_ACCOUNT }}
-        credentials: ${{ secrets.CLOUD_CREDENTIALS }}
-
     # uses duploctl from above
     - name: Update Service
       uses: duplocloud/actions/update-service@v0.0.3
