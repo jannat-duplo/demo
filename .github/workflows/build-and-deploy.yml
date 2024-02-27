@@ -14,10 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: 
       name: ${{ inputs.environment }}
-   # env:
-   #   DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
-   #   DUPLO_HOST: https://qa-aws.duplocloud.net
-    #  DUPLO_TENANT: sa0feb1
+    env:
+      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+      DUPLO_HOST: https://qa-aws.duplocloud.net
+      DUPLO_TENANT: sa0feb1
     steps: 
     
     # install and login to the cloud
