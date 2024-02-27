@@ -48,6 +48,11 @@ jobs:
          duplo_host: ${{ env.DUPLO_HOST }}
          duplo_token: ${{ secrets.DUPLO_TOKEN }}
          tenant: sa0feb1
+      - name: AWS ap-east-1 - Logintest
+        uses: duplocloud/ghactions-aws-jit@master
+        with:
+          admin: true
+          aws_region: ap-east-1
       - name: AWS us-west-2 - Logintest
         uses: duplocloud/ghactions-aws-jit@master
         with:
