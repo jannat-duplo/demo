@@ -39,15 +39,6 @@ jobs:
               { "Name": "s1", "Image": "nginx:stable" },
               { "Name": "statefulset", "Image": "nginx:stable" }
             ]
-      - name: Deploy Lambda
-        run: |
-            curl -Ssf -H 'Content-type: application/json' \
-              -H "Authorization: Bearer ${{env.duplo_token}}" -XPOST \
-              "${{env.duplo_host}}/subscriptions/${{env.DUPLO_TENANT_ID}}/UpdateLambdaFunction" \
-              -d "{
-                   'FunctionName': 'duploservices-${{env.TENANT_NAME}}-${{env.LAMBDA_NAME}}',
-                'ImageUri': "884446924812.dkr.ecr.us-east-2.amazonaws.com/numpy-lambda-container-automation:latest"
-            }"
        # install and login to the cloud
       - name: Duplo Setup
         uses: duplocloud/actions/setup@main
