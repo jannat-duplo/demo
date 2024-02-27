@@ -10,6 +10,29 @@ env:
   DUPLO_TENANT_ID: 2ee5692a-71cf-4565-a792-0502e13d7a32 # DuploCloud Tenant Id where lambda is deployed
   LAMBDA_NAME: duploservices-sa0feb1-l01	
 jobs:
+  update_service:
+    name: Update Service
+    runs-on: ubuntu-latest
+    environment: 
+      name: ${{ inputs.environment }}
+    env:
+      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+    steps: 
+    
+    # install and login to the cloud
+    - name: Duplo Setup
+      uses: duplocloud/actions/setup@v0.0.3
+      # only required on gcp and azure
+      with:
+        account-id: ${{ vars.CLOUD_ACCOUNT }}
+        credentials: ${{ secrets.CLOUD_CREDENTIALS }}
+
+    # uses duploctl from above
+    - name: Update Service
+      uses: duplocloud/actions/update-service@v0.0.3
+      with:
+        service: my-service
+        image: ${{ inputs.image }} 
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
     name: Deploy with DuploCloud
