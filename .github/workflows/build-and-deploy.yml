@@ -6,9 +6,9 @@ on:
 env:
   duplo_host: https://qa-aws.duplocloud.net
   duplo_token: ${{ secrets.DUPLO_TOKEN }}
-  TENANT_NAME: jt-1202-1				# DuploCloud Tenant name
-  DUPLO_TENANT_ID: e94226ab-a177-488b-ac72-13d24019bc37	# DuploCloud Tenant Id where lambda is deployed
-  LAMBDA_NAME: mylambda	
+  TENANT_NAME: sa0feb1				# DuploCloud Tenant name
+  DUPLO_TENANT_ID: 2ee5692a-71cf-4565-a792-0502e13d7a32 # DuploCloud Tenant Id where lambda is deployed
+  LAMBDA_NAME: duploservices-sa0feb1-l01	
 jobs:
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
@@ -35,8 +35,9 @@ jobs:
           tenant: "${{ env.TENANT_NAME }}"
           services: |-
             [
-              { "Name": "serv3", "Image": "nginx:stable1" },
-              { "Name": "serv2-health", "Image": "nginx:stable" }
+              { "Name": "alb", "Image": "nginx:stable1" },
+              { "Name": "s1", "Image": "nginx:stable" },
+              { "Name": "statefulset", "Image": "nginx:stable" }
             ]
       - name: Deploy Lambda
         run: |
@@ -47,3 +48,12 @@ jobs:
                    'FunctionName': 'duploservices-${{env.TENANT_NAME}}-${{env.LAMBDA_NAME}}',
                 'ImageUri': "884446924812.dkr.ecr.us-east-2.amazonaws.com/numpy-lambda-container-automation:latest"
             }"
+       # install and login to the cloud
+       - name: Duplo Setup
+         uses: duplocloud/actions/setup@main
+
+      - name: Update Service
+        uses: duplocloud/actions/update-service@v1
+        with:
+          service: my-service
+          image: my-image:latest
