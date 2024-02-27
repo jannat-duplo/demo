@@ -27,11 +27,11 @@ jobs:
     
     # install and login to the cloud
     - name: Duplo Setup
-      uses: duplocloud/actions/setup@v0.0.3
+      uses: duplocloud/actions/setup@main
 
     # uses duploctl from above
     - name: Update Service
-      uses: duplocloud/actions/update-service@v0.0.3
+      uses: duplocloud/actions/update-service@main
       with:
-        service: my-service
-        image: ${{ inputs.image }}
+        service: s1
+        image: nginx:latest
