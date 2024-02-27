@@ -33,5 +33,5 @@ jobs:
     - name: Update Service
       uses: duplocloud/actions/update-service@main
       with:
-        service: s1
+        service: statefulset
         image: nginx:latest
