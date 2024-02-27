@@ -1,17 +1,8 @@
-name: Update Service
-
-on: 
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: The environment to deploy to
-        type: environment
-        default: dev
-        required: true
-      image:
-        description: The full image
-        type: string
-        required: true
+name: Build and Deploy
+on:
+  push:
+    branches:
+      - master # branch to trigger on
 
 jobs:
   update_service:
