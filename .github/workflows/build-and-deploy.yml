@@ -36,7 +36,8 @@ jobs:
       with:
         name: cronjob1
         image: nginx:latest1
-         type: cronjob
+        type: cronjob
+         
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
     name: using GHA Jit update multiple services
