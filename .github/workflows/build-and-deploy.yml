@@ -34,8 +34,9 @@ jobs:
     - name: Update CronJob check
       uses: duplocloud/actions/update-service@main
       with:
-        cronjob: cronjob1
+        name: cronjob1
         image: nginx:latest1
+         type: cronjob
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
     name: using GHA Jit update multiple services
