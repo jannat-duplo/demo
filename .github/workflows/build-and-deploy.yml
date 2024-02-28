@@ -6,7 +6,7 @@ on:
 env:
   duplo_host: https://qa-aws.duplocloud.net
   duplo_token: ${{ secrets.DUPLO_TOKEN }}
-  TENANT_NAME: sa0feb1			# DuploCloud Tenant name
+  TENANT_NAME: safeb01			# DuploCloud Tenant name
 
 jobs:
   update_service:
@@ -17,7 +17,7 @@ jobs:
     env:
       DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
       DUPLO_HOST: https://qa-aws.duplocloud.net
-      DUPLO_TENANT: sa0feb1
+      DUPLO_TENANT: safeb01
     steps: 
     
     # install and login to the cloud
@@ -50,11 +50,6 @@ jobs:
          duplo_host: ${{ env.DUPLO_HOST }}
          duplo_token: ${{ secrets.DUPLO_TOKEN }}
          tenant: sa0feb1
-      - name: AWS ap-east-1 - Logintest
-        uses: duplocloud/ghactions-aws-jit@master
-        with:
-          admin: true
-          aws_region: ap-east-1
       - name: AWS us-west-2 - Logintest
         uses: duplocloud/ghactions-aws-jit@master
         with:
