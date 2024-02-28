@@ -31,8 +31,8 @@ jobs:
         service: statefulset
         image: nginx:latest1
         
-    - name: Update CronJob check
-      uses: duplocloud/actions/update-service@main
+    - name: Update CronJob 
+      uses: duplocloud/actions/update-image@main
       with:
         name: cronjob1
         image: nginx:latest1
