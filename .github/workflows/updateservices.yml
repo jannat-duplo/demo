@@ -41,7 +41,7 @@ jobs:
           tenant: "${{ env.TENANT_NAME }}"
           services: |-
             [
-              { "Name": "serv1", "Image": "nginx:stable1" },
+              { "Name": "serv1", "Image": "nginx:stable" },
               { "Name": "serv2", "Image": "nginx:stable" },
               { "Name": "serv3", "Image": "nginx:stable" },
               { "Name": "serv4", "Image": "nginx:stable" },
