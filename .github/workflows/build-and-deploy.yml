@@ -6,7 +6,7 @@ on:
 env:
   duplo_host: https://qa-aws.duplocloud.net
   duplo_token: ${{ secrets.DUPLO_TOKEN }}
-  TENANT_NAME: safeb01			# DuploCloud Tenant name
+  TENANT_NAME: jt-1206-1			# DuploCloud Tenant name
 
 jobs:
   update_service:
@@ -17,7 +17,7 @@ jobs:
     env:
       DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
       DUPLO_HOST: https://qa-aws.duplocloud.net
-      DUPLO_TENANT: safeb01
+      DUPLO_TENANT: jt-1206-1
     steps: 
     
     # install and login to the cloud
@@ -28,13 +28,13 @@ jobs:
     - name: Update Service
       uses: duplocloud/actions/update-service@main
       with:
-        service: statefulset
+        service: serv1
         image: nginx:latest1
         
     - name: Update CronJob 
       uses: duplocloud/actions/update-cronjob@main
       with:
-        cronjob: cronjob1
+        cronjob: test2
         image: nginx:latest1
          
   deploy:
@@ -48,7 +48,7 @@ jobs:
          aws_region: us-east-2 #ap-east-1
          duplo_host: ${{ env.DUPLO_HOST }}
          duplo_token: ${{ secrets.DUPLO_TOKEN }}
-         tenant: sa0feb1
+         tenant: jt-1206-1
       - name: AWS us-west-2 - Logintest
         uses: duplocloud/ghactions-aws-jit@master
         with:
@@ -62,7 +62,7 @@ jobs:
           tenant: "${{ env.TENANT_NAME }}"
           services: |-
             [
-              { "Name": "s1", "Image": "nginx:stable1" },
-              { "Name": "tag2", "Image": "nginx:stable" }
+              { "Name": "serv1", "Image": "nginx:stable1" },
+              { "Name": "serv2", "Image": "nginx:stable" }
             ]      
 
