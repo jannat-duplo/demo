@@ -12,7 +12,7 @@ on:
         type: string
         required: true
 env:
-  duplo_host: https://qa-govcloud.duplocloud.net
+  duplo_host: https://qa-aws.duplocloud.net
   duplo_token: ${{ secrets.DUPLO_TOKEN }}
   TENANT_NAME: jt-1206-1			# DuploCloud Tenant name
 jobs:
@@ -24,15 +24,15 @@ jobs:
       - name: aws-jit
         uses: duplocloud/ghactions-aws-jit@master
         with:
-         aws_region: us-gov-west-1 #ap-east-1
+         aws_region: us-east-2 #ap-east-1
          duplo_host: https://qa-govcloud.duplocloud.net
          duplo_token: ${{ secrets.DUPLO_TOKEN }}
          tenant: "${{ env.TENANT_NAME }}"
-      - name: AWS us-gov-west-1 - Logintest
+      - name: AWS us-west-2 - Logintest
         uses: duplocloud/ghactions-aws-jit@master
         with:
           admin: true
-          aws_region: us-gov-west-1
+          aws_region: us-west-2
       - name: list-vpc
         run: aws ec2 describe-vpcs
       - name: Deploy
