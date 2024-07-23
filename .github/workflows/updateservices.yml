@@ -14,7 +14,7 @@ on:
 env:
   duplo_host: https://qa-aws.duplocloud.net
   duplo_token: ${{ secrets.DUPLO_TOKEN }}
-  TENANT_NAME: jt-1206-1			# DuploCloud Tenant name
+  TENANT_NAME: sandhya		# DuploCloud Tenant name
 jobs:
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
