@@ -11,7 +11,7 @@ env:
 jobs:
   update_service:
     name: Update Service using DuploCtl
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest2
     environment: 
       name: ${{ inputs.environment }}
     env:
@@ -29,13 +29,13 @@ jobs:
       uses: duplocloud/actions/update-service@main
       with:
         service: serv1
-        image: nginx:latest1
+        image: nginx:latest12
         
     - name: Update CronJob 
       uses: duplocloud/actions/update-cronjob@main
       with:
         cronjob: test2
-        image: nginx:latest1
+        image: nginx:latest12
          
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
