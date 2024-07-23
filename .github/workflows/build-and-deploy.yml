@@ -29,13 +29,13 @@ jobs:
       uses: duplocloud/actions/update-service@main
       with:
         service: serv1
-        image: nginx:latest
+        image: nginx:latest1
         
     - name: Update CronJob 
       uses: duplocloud/actions/update-cronjob@main
       with:
         cronjob: test2
-        image: nginx:latest
+        image: nginx:latest1
          
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
