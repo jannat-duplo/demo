@@ -6,7 +6,7 @@ on:
 env:
   duplo_host: https://qa-aws.duplocloud.net
   duplo_token: ${{ secrets.DUPLO_TOKEN }}
-  TENANT_NAME: jt-1206-1			# DuploCloud Tenant name
+  TENANT_NAME: sandhya		# DuploCloud Tenant name
 
 jobs:
   update_service:
@@ -17,7 +17,7 @@ jobs:
     env:
       DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
       DUPLO_HOST: https://qa-aws.duplocloud.net
-      DUPLO_TENANT: jt-1206-1
+      DUPLO_TENANT: sandhya
     steps: 
     
     # install and login to the cloud
@@ -29,13 +29,13 @@ jobs:
       uses: duplocloud/actions/update-service@main
       with:
         service: serv1
-        image: nginx:latest1
+        image: nginx:latest
         
     - name: Update CronJob 
       uses: duplocloud/actions/update-cronjob@main
       with:
         cronjob: test2
-        image: nginx:latest1
+        image: nginx:latest
          
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
@@ -48,7 +48,7 @@ jobs:
          aws_region: us-east-2 #ap-east-1
          duplo_host: ${{ env.DUPLO_HOST }}
          duplo_token: ${{ secrets.DUPLO_TOKEN }}
-         tenant: jt-1206-1
+         tenant: sandhya
       - name: AWS us-west-2 - Logintest
         uses: duplocloud/ghactions-aws-jit@master
         with:
