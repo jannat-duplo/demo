@@ -1,54 +1,33 @@
 name: Build and Deploy
-on:
-  push:
-    branches:
-      - master # branch to trigger on
+on: 
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: The environment to deploy to
+        type: environment
+        default: dev
+        required: true
+      image:
+        description: The full image
+        type: string
+        required: true
 env:
   duplo_host: https://qa-aws.duplocloud.net
   duplo_token: ${{ secrets.DUPLO_TOKEN }}
   TENANT_NAME: sandhya		# DuploCloud Tenant name
-
 jobs:
-  update_service:
-    name: Update Service using DuploCtl
-    runs-on: ubuntu-latest2
-    environment: 
-      name: ${{ inputs.environment }}
-    env:
-      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
-      DUPLO_HOST: https://qa-aws.duplocloud.net
-      DUPLO_TENANT: sandhya
-    steps: 
-    
-    # install and login to the cloud
-    - name: Duplo Setup
-      uses: duplocloud/actions/setup@main
-
-    # uses duploctl from above
-    - name: Update Service
-      uses: duplocloud/actions/update-service@main
-      with:
-        service: serv1
-        image: nginx:latest12
-        
-    - name: Update CronJob 
-      uses: duplocloud/actions/update-cronjob@main
-      with:
-        cronjob: test2
-        image: nginx:latest12
-         
   deploy:
     # This example get AWS credentials, then lists all S3 buckets.
-    name: using GHA Jit update multiple services
+    name: Deploy with DuploCloud
     runs-on: ubuntu-latest
     steps:
       - name: aws-jit
         uses: duplocloud/ghactions-aws-jit@master
         with:
          aws_region: us-east-2 #ap-east-1
-         duplo_host: ${{ env.DUPLO_HOST }}
+         duplo_host: https://qa-aws.duplocloud.net
          duplo_token: ${{ secrets.DUPLO_TOKEN }}
-         tenant: sandhya
+         tenant: "${{ env.TENANT_NAME }}"
       - name: AWS us-west-2 - Logintest
         uses: duplocloud/ghactions-aws-jit@master
         with:
@@ -65,7 +44,7 @@ jobs:
               { "Name": "serv1", "Image": "nginx:stable" },
               { "Name": "serv2", "Image": "nginx:stable" },
               { "Name": "serv3", "Image": "nginx:stable" },
-              { "Name": "serv4", "Image": "nginx:stable" }
-              
-            ]      
-
+              { "Name": "serv4", "Image": "nginx:stable" },
+              { "Name": "serv5", "Image": "nginx:stable" },
+              { "Name": "serv6", "Image": "nginx:stable" }
+            ]
