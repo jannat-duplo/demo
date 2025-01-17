@@ -16,7 +16,7 @@ jobs:
       name: ${{ inputs.environment }}
     env:
       DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
-      DUPLO_HOST: https://qa-aws.duplocloud.net
+      DUPLO_HOST: https://oneclick.duplocloud.net
       DUPLO_TENANT: sandhya
     steps: 
     
