@@ -18,11 +18,11 @@ jobs:
     
     # install and login to the cloud
     - name: Duplo Setup
-      uses: duplocloud/actions@vnode24-upgrade
+      uses: duplocloud/actions@node24-upgrade
 
     # uses duploctl from above
     - name: Update Service
-      uses: duplocloud/actions/update-image@vnode24-upgrade
+      uses: duplocloud/actions/update-image@node24-upgrade
       with:
         name: serv3
         image: nginx:123
