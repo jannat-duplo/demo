@@ -18,11 +18,11 @@ jobs:
     
     # install and login to the cloud
     - name: Duplo Setup
-      uses: duplocloud/actions@v0.0.13
+      uses: duplocloud/actions@vnode24-upgrade
 
     # uses duploctl from above
     - name: Update Service
-      uses: duplocloud/actions/update-image@v0.0.14
+      uses: duplocloud/actions/update-image@vnode24-upgrade
       with:
         name: serv3
         image: nginx:123
@@ -36,7 +36,7 @@ jobs:
         aws-region: us-west-2     
 
     - name: Update Multiple Images
-      uses: duplocloud/actions/update-images@v0.0.13
+      uses: duplocloud/actions/update-images@node24-upgrade
       with:
         services: |
           [
