@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install duploctl
-        run: pip install duploctl
+        run: pip install duplocloud-client
 
       - name: Tag Image
         id: tag
