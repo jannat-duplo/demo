@@ -20,12 +20,12 @@ jobs:
       DUPLO_TENANT: ${{ vars.DUPLO_TENANT }}
     steps:
       - name: Duplo Setup AWS
-        uses: duplocloud/actions@node24-upgrade
+        uses: duplocloud/actions@v0.0.14
         with:
           region: ${{ vars.AWS_REGION }}
 
       - name: Update Lambda
-        uses: duplocloud/actions/update-lambda@node24-upgrade
+        uses: duplocloud/actions/update-lambda@v0.0.14
         with:
           lambda: ${{ inputs.lambda }}
           uri: ${{ inputs.uri }}
