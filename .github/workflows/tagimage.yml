@@ -19,9 +19,6 @@ jobs:
       DUPLO_HOST: ${{ vars.DUPLO_HOST }}
       DUPLO_TENANT: ${{ vars.DUPLO_TENANT }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Duplo Setup AWS
         uses: duplocloud/actions@node24-upgrade
         with:
