@@ -32,32 +32,23 @@ jobs:
 
       - name: Create Job YAML
         run: |
-          python3 -c "
-          import yaml
-          job = {
-            'metadata': {'name': 'duploctl'},
-            'spec': {
-              'ttlSecondsAfterFinished': 86400,
-              'parallelism': 2,
-              'completions': 4,
-              'template': {
-                'spec': {
-                  'restartPolicy': 'Never',
-                  'containers': [{
-                    'name': 'app',
-                    'image': 'ubuntu:latest',
-                    'command': ['/bin/bash', '-c'],
-                    'args': ['echo Hello World && sleep 10 && echo Goodbye World']
-                  }],
-                  'initContainers': []
-                }
-              }
-            }
-          }
-          with open('job.yaml', 'w') as f:
-            yaml.dump(job, f)
-          print('job.yaml created')
-          "
+          printf '%s\n' \
+            'metadata:' \
+            '  name: duploctl' \
+            'spec:' \
+            '  ttlSecondsAfterFinished: 86400' \
+            '  parallelism: 2' \
+            '  completions: 4' \
+            '  template:' \
+            '    spec:' \
+            '      restartPolicy: Never' \
+            '      containers:' \
+            '      - name: app' \
+            '        image: ubuntu:latest' \
+            '        command: [/bin/bash, -c]' \
+            '        args: ["echo Hello World && sleep 10 && echo Goodbye World"]' \
+            '      initContainers: []' \
+            > job.yaml
 
       - name: Run Kubernetes Job
         uses: duplocloud/actions/k8s-job@node24-upgrade
