@@ -18,46 +18,20 @@ jobs:
       DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
       DUPLO_HOST: ${{ vars.DUPLO_HOST }}
       DUPLO_TENANT: ${{ vars.DUPLO_TENANT }}
-      SERVICE_NAME: ${{ inputs.name }}
-      TAGS_INPUT: ${{ inputs.tags }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install duploctl
-        run: pip install duplocloud-client
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Duplo Setup AWS
+        uses: duplocloud/actions@node24-upgrade
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_REGION }}
+          region: ${{ vars.AWS_REGION }}
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Tag Image
-        id: tag
-        shell: bash
-        run: |
-          URI=$(duploctl service find "$SERVICE_NAME" -o string -q 'Template.Containers[0].Image')
-
-          # take the tag off the uri to get image
-          IMAGE=$(echo "$URI" | cut -d: -f1)
-
-          docker pull "$URI"
-
-          # if the tags_input is empty or has no value or null
-          if [[ -z "$TAGS_INPUT" ]]; then
-            GIT_REF="$(echo "${GITHUB_REF##*/}" | sed -e 's/\//_/g')"
-            TAGS_INPUT="$GIT_REF"
-          fi
-
-          TAGS="$TAGS_INPUT"
-          for tag in $TAGS; do
-            docker tag "$URI" "$IMAGE:$tag"
-          done
-
-          # Push the image to the registry
-          docker push "$IMAGE" --all-tags
+        uses: duplocloud/actions/tag-image@node24-upgrade
+        with:
+          name: ${{ inputs.name }}
+          tags: ${{ inputs.tags }}
