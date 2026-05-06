@@ -1,0 +1,31 @@
+name: Update CronJob
+
+on:
+  workflow_dispatch:
+    inputs:
+      cronjob:
+        description: CronJob name
+        required: true
+      image:
+        description: Image name
+        required: true
+
+jobs:
+  update-cronjob:
+    runs-on: ubuntu-latest
+    environment: qa-aws
+    env:
+      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+      DUPLO_HOST: ${{ vars.DUPLO_HOST }}
+      DUPLO_TENANT: ${{ vars.DUPLO_TENANT }}
+    steps:
+      - name: Duplo Setup AWS
+        uses: duplocloud/actions@node24-upgrade
+        with:
+          region: ${{ vars.AWS_REGION }}
+
+      - name: Update CronJob
+        uses: duplocloud/actions/update-cronjob@node24-upgrade
+        with:
+          cronjob: ${{ inputs.cronjob }}
+          image: ${{ inputs.image }}

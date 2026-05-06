@@ -1,0 +1,37 @@
+name: Update Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      services:
+        description: 'JSON array of service-image pairs. Format: [{"service": "service1", "image": "image1:tag"}]'
+        required: true
+      wait:
+        description: Wait for all deployments to complete
+        required: false
+        default: "false"
+      loglevel:
+        description: Log level for duploctl output
+        required: false
+        default: "INFO"
+
+jobs:
+  update-images:
+    runs-on: ubuntu-latest
+    environment: qa-aws
+    env:
+      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+      DUPLO_HOST: ${{ vars.DUPLO_HOST }}
+      DUPLO_TENANT: ${{ vars.DUPLO_TENANT }}
+    steps:
+      - name: Duplo Setup AWS
+        uses: duplocloud/actions@node24-upgrade
+        with:
+          region: ${{ vars.AWS_REGION }}
+
+      - name: Update Images
+        uses: duplocloud/actions/update-images@node24-upgrade
+        with:
+          services: ${{ inputs.services }}
+          wait: ${{ inputs.wait }}
+          loglevel: ${{ inputs.loglevel }}

@@ -1,0 +1,31 @@
+name: Update Service
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Service name
+        required: true
+      image:
+        description: Image name
+        required: true
+
+jobs:
+  update-service:
+    runs-on: ubuntu-latest
+    environment: qa-aws
+    env:
+      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+      DUPLO_HOST: ${{ vars.DUPLO_HOST }}
+      DUPLO_TENANT: ${{ vars.DUPLO_TENANT }}
+    steps:
+      - name: Duplo Setup AWS
+        uses: duplocloud/actions@node24-upgrade
+        with:
+          region: ${{ vars.AWS_REGION }}
+
+      - name: Update Service
+        uses: duplocloud/actions/update-service@node24-upgrade
+        with:
+          service: ${{ inputs.service }}
+          image: ${{ inputs.image }}

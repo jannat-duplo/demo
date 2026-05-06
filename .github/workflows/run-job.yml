@@ -1,0 +1,58 @@
+name: Run DuploCloud Job
+
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: The file with the job definition to run
+        required: false
+        default: "job.yaml"
+      wait:
+        description: Wait for the job to complete
+        required: false
+        default: "true"
+      loglevel:
+        description: Log level for duploctl (INFO, WARN, ERROR, DEBUG)
+        required: false
+        default: "INFO"
+
+jobs:
+  run-job:
+    runs-on: ubuntu-latest
+    environment: qa-aws
+    env:
+      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+      DUPLO_HOST: ${{ vars.DUPLO_HOST }}
+      DUPLO_TENANT: ${{ vars.DUPLO_TENANT }}
+    steps:
+      - name: Duplo Setup AWS
+        uses: duplocloud/actions@node24-upgrade
+        with:
+          region: ${{ vars.AWS_REGION }}
+
+      - name: Create Job YAML
+        run: |
+          printf '%s\n' \
+            'metadata:' \
+            '  name: duploctl' \
+            'spec:' \
+            '  ttlSecondsAfterFinished: 86400' \
+            '  parallelism: 2' \
+            '  completions: 4' \
+            '  template:' \
+            '    spec:' \
+            '      restartPolicy: Never' \
+            '      containers:' \
+            '      - name: app' \
+            '        image: ubuntu:latest' \
+            '        command: [/bin/bash, -c]' \
+            '        args: ["echo Hello World && sleep 10 && echo Goodbye World"]' \
+            '      initContainers: []' \
+            > job.yaml
+
+      - name: Run DuploCloud Job
+        uses: duplocloud/actions/run-job@node24-upgrade
+        with:
+          file: ${{ inputs.file }}
+          wait: ${{ inputs.wait }}
+          loglevel: ${{ inputs.loglevel }}

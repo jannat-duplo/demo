@@ -1,0 +1,41 @@
+name: Update Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: Service name
+        required: true
+      image:
+        description: Image URI
+        required: true
+      type:
+        description: Service type (service, ecs, lambda, cronjob)
+        required: false
+        default: "service"
+      wait:
+        description: Wait for deployment
+        required: false
+        default: "false"
+
+jobs:
+  update-image:
+    runs-on: ubuntu-latest
+    environment: qa-aws
+    env:
+      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+      DUPLO_HOST: ${{ vars.DUPLO_HOST }}
+      DUPLO_TENANT: ${{ vars.DUPLO_TENANT }}
+    steps:
+      - name: Duplo Setup AWS
+        uses: duplocloud/actions@node24-upgrade
+        with:
+          region: ${{ vars.AWS_REGION }}
+
+      - name: Update Image
+        uses: duplocloud/actions/update-image@node24-upgrade
+        with:
+          name: ${{ inputs.name }}
+          image: ${{ inputs.image }}
+          type: ${{ inputs.type }}
+          wait: ${{ inputs.wait }}

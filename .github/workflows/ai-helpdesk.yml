@@ -1,0 +1,56 @@
+name: AI HelpDesk Ticket
+
+on:
+  workflow_dispatch:
+    inputs:
+      agent_name:
+        description: Name of the AI agent to handle the ticket
+        required: true
+      agent_instance:
+        description: Instance ID of the AI agent
+        required: true
+      title:
+        description: Ticket title
+        required: false
+        default: ""
+      context:
+        description: Contextual header section
+        required: false
+        default: ""
+      content:
+        description: Additional content appended after the context section
+        required: false
+        default: ""
+      include_sensitive_data:
+        description: Whether to include sensitive data in ticket context
+        required: false
+        default: "true"
+      hide_response:
+        description: Hide the agent response in the summary
+        required: false
+        default: "false"
+
+jobs:
+  ai-helpdesk:
+    runs-on: ubuntu-latest
+    environment: qa-aws
+    env:
+      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+      DUPLO_HOST: ${{ vars.DUPLO_HOST }}
+      DUPLO_TENANT: ${{ vars.DUPLO_TENANT }}
+    steps:
+      - name: Duplo Setup AWS
+        uses: duplocloud/actions@node24-upgrade
+        with:
+          region: ${{ vars.AWS_REGION }}
+
+      - name: AI HelpDesk Ticket
+        uses: duplocloud/actions/ai-helpdesk@node24-upgrade
+        with:
+          agent_name: ${{ inputs.agent_name }}
+          agent_instance: ${{ inputs.agent_instance }}
+          title: ${{ inputs.title }}
+          context: ${{ inputs.context }}
+          content: ${{ inputs.content }}
+          include_sensitive_data: ${{ inputs.include_sensitive_data }}
+          hide_response: ${{ inputs.hide_response }}
