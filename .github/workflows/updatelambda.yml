@@ -15,21 +15,17 @@ jobs:
     runs-on: ubuntu-latest
     environment: qa-aws
     env:
-      LAMBDA: ${{ inputs.lambda }}
-      URI: ${{ inputs.uri }}
+      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+      DUPLO_HOST: ${{ vars.DUPLO_HOST }}
+      DUPLO_TENANT: ${{ vars.DUPLO_TENANT }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Duplo Setup AWS
+        uses: duplocloud/actions@node24-upgrade
+        with:
+          region: ${{ vars.AWS_REGION }}
 
       - name: Update Lambda
-        id: duploctl
-        shell: bash
-        run: |
-          if [[ "${URI}" = s3://* ]]; then
-            s3_path="${URI#s3://}"
-            bucket="${s3_path%%/*}"
-            key="${s3_path#*/}"
-            duploctl lambda update_s3 "${LAMBDA}" "${bucket}" "${key}"
-          else
-            duploctl lambda update_image "${LAMBDA}" "${URI}"
-          fi
+        uses: duplocloud/actions/update-lambda@node24-upgrade
+        with:
+          lambda: ${{ inputs.lambda }}
+          uri: ${{ inputs.uri }}
