@@ -1,20 +1,27 @@
 name: Tag Image
-description: Tag the image used by a service in a sepcific tenant. 
-inputs:
-  name: 
-    description: The name of the service
-    required: true
-  tags: 
-    description: The tags to apply to the image
-    required: false
-runs:
-  using: composite
-  steps:
 
-  - name: Tag Image
-    id: tag
-    shell: bash
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: The name of the service
+        required: true
+      tags:
+        description: The tags to apply to the image
+        required: false
+
+jobs:
+  tag-image:
+    runs-on: ubuntu-latest
+    environment: qa-aws
     env:
       SERVICE_NAME: ${{ inputs.name }}
       TAGS_INPUT: ${{ inputs.tags }}
-    run: $GITHUB_ACTION_PATH/tag-image.sh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Tag Image
+        id: tag
+        shell: bash
+        run: $GITHUB_ACTION_PATH/tag-image.sh
