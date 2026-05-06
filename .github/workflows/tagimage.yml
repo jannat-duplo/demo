@@ -20,7 +20,7 @@ jobs:
       DUPLO_TENANT: ${{ vars.DUPLO_TENANT }}
     steps:
       - name: Duplo Setup AWS
-        uses: duplocloud/actions@node24-upgrade
+        uses: duplocloud/actions@v0.0.14
         with:
           region: ${{ vars.AWS_REGION }}
 
@@ -28,7 +28,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Tag Image
-        uses: duplocloud/actions/tag-image@node24-upgrade
+        uses: duplocloud/actions/tag-image@v0.0.14
         with:
           name: ${{ inputs.name }}
           tags: ${{ inputs.tags }}
