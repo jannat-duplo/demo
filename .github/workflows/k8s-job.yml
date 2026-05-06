@@ -6,11 +6,11 @@ on:
       file:
         description: The file with a k8s job to run
         required: false
-        default: job.yaml
+        default: "job.yaml"
       timeout:
         description: The timeout for the job
         required: false
-        default: 300s
+        default: "300s"
       cleanup_delay:
         description: Wait time in seconds before cleaning up the job
         required: false
