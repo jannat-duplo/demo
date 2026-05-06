@@ -1,0 +1,38 @@
+name: Run Kubernetes Job
+
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: The file with a k8s job to run
+        required: false
+        default: job.yaml
+      timeout:
+        description: The timeout for the job
+        required: false
+        default: 300s
+      cleanup_delay:
+        description: Wait time in seconds before cleaning up the job
+        required: false
+        default: "0"
+
+jobs:
+  k8s-job:
+    runs-on: ubuntu-latest
+    environment: qa-aws
+    env:
+      DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+      DUPLO_HOST: ${{ vars.DUPLO_HOST }}
+      DUPLO_TENANT: ${{ vars.DUPLO_TENANT }}
+    steps:
+      - name: Duplo Setup AWS
+        uses: duplocloud/actions@node24-upgrade
+        with:
+          region: ${{ vars.AWS_REGION }}
+
+      - name: Run Kubernetes Job
+        uses: duplocloud/actions/k8s-job@node24-upgrade
+        with:
+          file: ${{ inputs.file }}
+          timeout: ${{ inputs.timeout }}
+          cleanup_delay: ${{ inputs.cleanup_delay }}
