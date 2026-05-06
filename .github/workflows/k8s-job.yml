@@ -30,6 +30,36 @@ jobs:
         with:
           region: ${{ vars.AWS_REGION }}
 
+      - name: Create Job YAML
+        run: |
+          cat <<'EOF' > job.yaml
+          metadata:
+            name: duploctl
+          spec:
+            ttlSecondsAfterFinished: 86400
+            parallelism: 2
+            completions: 4
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                - name: app
+                  image: ubuntu:latest
+                  command:
+                  - /bin/bash
+                  - -c
+                  args:
+                  - |
+                    echo "Hello, World!"
+                    sleep 10
+                    echo "Goodbye, World!"
+                    num="$(echo $((1 + $RANDOM % 10)))"
+                    sleep $num
+                    echo "I slept for $num seconds"
+                    sleep 10
+                initContainers: []
+          EOF
+
       - name: Run Kubernetes Job
         uses: duplocloud/actions/k8s-job@node24-upgrade
         with:
