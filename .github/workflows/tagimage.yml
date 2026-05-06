@@ -16,8 +16,8 @@ jobs:
     environment: qa-aws
     env:
       DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
-      DUPLO_HOST: ${{ secrets.DUPLO_HOST }}
-      DUPLO_TENANT: ${{ secrets.DUPLO_TENANT }}
+      DUPLO_HOST: ${{ vars.DUPLO_HOST }}
+      DUPLO_TENANT: ${{ vars.DUPLO_TENANT }}
       SERVICE_NAME: ${{ inputs.name }}
       TAGS_INPUT: ${{ inputs.tags }}
     steps:
@@ -32,7 +32,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
