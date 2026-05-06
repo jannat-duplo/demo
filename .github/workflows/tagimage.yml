@@ -21,6 +21,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install duploctl
+        run: pip install duploctl
+
       - name: Tag Image
         id: tag
         shell: bash
