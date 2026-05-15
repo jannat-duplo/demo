@@ -81,7 +81,8 @@ jobs:
           # Usage: check_image.sh <service_name> <tenant> <namespace> <expected_image> <test_name>
           SVC=$1; TENANT=$2; NS=$3; EXPECTED=$4; TEST=$5
 
-          sleep 30
+          echo "Waiting 2 minutes for K8s to propagate..."
+          sleep 120
 
           DUPLO_IMG=$(duploctl service find "$SVC" \
             --tenant "$TENANT" \
