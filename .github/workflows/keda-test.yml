@@ -46,8 +46,11 @@ jobs:
 
           # Install duplo-jit (required by kubeconfig for EKS auth)
           LATEST=$(curl -s https://api.github.com/repos/duplocloud/duplo-jit/releases/latest | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])")
-          curl -Ls "https://github.com/duplocloud/duplo-jit/releases/download/${LATEST}/duplo-jit-linux-amd64.tar.gz" \
-            | tar -xz -C /usr/local/bin/
+          VERSION=${LATEST#v}
+          curl -Ls "https://github.com/duplocloud/duplo-jit/releases/download/${LATEST}/duplo-jit_${VERSION}_linux_amd64.zip" \
+            -o /tmp/duplo-jit.zip
+          unzip -o /tmp/duplo-jit.zip duplo-jit -d /usr/local/bin/
+          chmod +x /usr/local/bin/duplo-jit
           echo "duplo-jit installed: $(duplo-jit --version 2>&1 || echo ok)"
 
       # ── 2. Setup kubeconfig from secret ──────────────────────────────────
