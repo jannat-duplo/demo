@@ -1,0 +1,249 @@
+name: (Oneclick) Native HPA Test - Duplo Deletes kubectl autoscale HPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      service_name:
+        description: "Service name"
+        required: true
+        default: "native-hpa"
+      tenant:
+        description: "DuploCloud tenant name"
+        required: true
+        default: "jt1505n"
+      namespace:
+        description: "Kubernetes namespace"
+        required: true
+        default: "duploservices-jt1505n"
+      min_replicas:
+        description: "HPA min replicas"
+        required: true
+        default: "3"
+      max_replicas:
+        description: "HPA max replicas"
+        required: true
+        default: "10"
+      cpu_percent:
+        description: "HPA CPU target percent"
+        required: true
+        default: "50"
+
+env:
+  DUPLO_HOST: https://oneclick.duplocloud.net
+  DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+
+jobs:
+  native-hpa-test:
+    name: Native HPA - Duplo Ownership Regression
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Install tools ──────────────────────────────────────────────────
+      - name: Install duploctl, kubectl and duplo-jit
+        run: |
+          pip install duplocloud-client
+
+          curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl && mv kubectl /usr/local/bin/kubectl
+          kubectl version --client
+
+          LATEST=$(curl -s https://api.github.com/repos/duplocloud/duplo-jit/releases/latest | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])")
+          VERSION=${LATEST#v}
+          curl -Ls "https://github.com/duplocloud/duplo-jit/releases/download/${LATEST}/duplo-jit_${VERSION}_linux_amd64.zip" \
+            -o /tmp/duplo-jit.zip
+          unzip -o /tmp/duplo-jit.zip duplo-jit -d /usr/local/bin/
+          chmod +x /usr/local/bin/duplo-jit
+          echo "duplo-jit installed: $(duplo-jit --version 2>&1 || echo ok)"
+
+      # ── 2. Setup kubeconfig ───────────────────────────────────────────────
+      - name: Setup kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_ONECLICK }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl get nodes --no-headers | awk '{print $1, $2}'
+
+      # ── 3. Create EKS service (replicas = 1) ─────────────────────────────
+      - name: Create EKS Service (replicas=1)
+        run: |
+          echo "Creating service: ${{ inputs.service_name }}"
+
+          cat > /tmp/native-hpa-svc.yaml << EOF
+          Name: ${{ inputs.service_name }}
+          DockerImage: nginx:latest
+          Replicas: 1
+          Cloud: 0
+          AgentPlatform: 7
+          OtherDockerConfig: '{"Env":null}'
+          NetworkId: default
+          EOF
+
+          duploctl service create \
+            --tenant "${{ inputs.tenant }}" \
+            --file /tmp/native-hpa-svc.yaml
+
+          echo "Waiting 60s for service to be ready..."
+          sleep 60
+
+          duploctl service find "${{ inputs.service_name }}" \
+            --tenant "${{ inputs.tenant }}" \
+            --query "{Name:Name, Image:Template.Containers[0].Image, Replicas:Replicas}"
+
+      # ── 4. Verify no HPA before applying ─────────────────────────────────
+      - name: Verify no HPA exists before applying
+        run: |
+          HPA_COUNT=$(kubectl get hpa -n ${{ inputs.namespace }} \
+            --no-headers 2>/dev/null | grep "${{ inputs.service_name }}" | wc -l)
+          echo "Existing HPAs: $HPA_COUNT"
+
+          if [ "$HPA_COUNT" = "0" ]; then
+            echo "✅ Clean state — no HPA exists"
+          else
+            echo "⚠️  Existing HPA found — deleting before test"
+            kubectl delete hpa "${{ inputs.service_name }}" \
+              -n ${{ inputs.namespace }} 2>/dev/null || true
+            sleep 10
+          fi
+
+      # ── 5. Apply HPA via kubectl autoscale (exact bug reproduction) ───────
+      - name: Apply HPA via kubectl autoscale
+        run: |
+          echo "Applying HPA via: kubectl autoscale deployment/${{ inputs.service_name }} --min=${{ inputs.min_replicas }} --max=${{ inputs.max_replicas }} --cpu-percent=${{ inputs.cpu_percent }}"
+
+          kubectl autoscale deployment/${{ inputs.service_name }} \
+            --min=${{ inputs.min_replicas }} \
+            --max=${{ inputs.max_replicas }} \
+            --cpu-percent=${{ inputs.cpu_percent }} \
+            -n ${{ inputs.namespace }}
+
+          echo "HPA applied. Waiting 30s for pods to scale up to min=${{ inputs.min_replicas }}..."
+          sleep 30
+
+          echo "=== HPA Status ==="
+          kubectl get hpa -n ${{ inputs.namespace }} 2>&1
+
+          echo "=== Pod Count ==="
+          POD_COUNT=$(kubectl get pods -n ${{ inputs.namespace }} \
+            -l app=${{ inputs.service_name }} \
+            --no-headers 2>/dev/null | wc -l)
+          echo "Pods running: $POD_COUNT (expected >= ${{ inputs.min_replicas }})"
+
+      # ── 6. Poll HPA every 15s for 3 minutes — detect if Duplo deletes it ─
+      - name: Poll HPA every 15s — detect Duplo deletion (3 min window)
+        run: |
+          echo "Polling HPA every 15s for 3 minutes..."
+          echo "Bug: Duplo deletes HPA within ~44 seconds"
+          echo ""
+
+          DELETED_AT=""
+          for i in $(seq 1 12); do
+            ELAPSED=$((i * 15))
+            HPA=$(kubectl get hpa "${{ inputs.service_name }}" \
+              -n ${{ inputs.namespace }} --no-headers 2>/dev/null | awk '{print $1}')
+            POD_COUNT=$(kubectl get pods -n ${{ inputs.namespace }} \
+              -l app=${{ inputs.service_name }} \
+              --no-headers 2>/dev/null | wc -l)
+
+            if [ -n "$HPA" ]; then
+              echo "[${ELAPSED}s] ✅ HPA active | Pods: $POD_COUNT"
+            else
+              echo "[${ELAPSED}s] ❌ HPA DELETED by Duplo! | Pods: $POD_COUNT"
+              DELETED_AT=$ELAPSED
+              break
+            fi
+            sleep 15
+          done
+
+          echo ""
+          if [ -n "$DELETED_AT" ]; then
+            echo "=========================================="
+            echo "❌ BUG CONFIRMED: Duplo deleted native HPA"
+            echo "   HPA was deleted at ~${DELETED_AT}s"
+            echo "   kubectl autoscale HPA not respected"
+            echo "=========================================="
+          else
+            echo "=========================================="
+            echo "✅ HPA survived 3 minutes — Duplo respected native HPA"
+            echo "=========================================="
+          fi
+
+      # ── 7. Final state check ──────────────────────────────────────────────
+      - name: Final state verification
+        run: |
+          HPA=$(kubectl get hpa "${{ inputs.service_name }}" \
+            -n ${{ inputs.namespace }} --no-headers 2>/dev/null | awk '{print $1}')
+
+          DUPLO_REPLICAS=$(duploctl service find "${{ inputs.service_name }}" \
+            --tenant "${{ inputs.tenant }}" \
+            --query "Replicas" -o string)
+
+          POD_COUNT=$(kubectl get pods -n ${{ inputs.namespace }} \
+            -l app=${{ inputs.service_name }} \
+            --no-headers 2>/dev/null | wc -l)
+
+          echo "=============================="
+          echo "HPA active        : ${HPA:-NOT FOUND}"
+          echo "Duplo replicas    : $DUPLO_REPLICAS"
+          echo "Running pods      : $POD_COUNT"
+          echo "HPA min replicas  : ${{ inputs.min_replicas }}"
+          echo "=============================="
+
+          kubectl get hpa -n ${{ inputs.namespace }} 2>&1 || echo "No HPAs found"
+          kubectl get pods -n ${{ inputs.namespace }} -l app=${{ inputs.service_name }} --no-headers 2>&1
+
+          if [ -z "$HPA" ]; then
+            echo "❌ FAIL — HPA deleted by Duplo (bug confirmed)"
+            exit 1
+          else
+            echo "✅ PASS — HPA still active"
+          fi
+
+      # ── 8. Cleanup ────────────────────────────────────────────────────────
+      - name: Cleanup HPA and Service
+        if: always()
+        run: |
+          kubectl delete hpa "${{ inputs.service_name }}" \
+            -n ${{ inputs.namespace }} 2>/dev/null || true
+
+          duploctl service delete \
+            --tenant "${{ inputs.tenant }}" \
+            "${{ inputs.service_name }}" 2>/dev/null || true
+
+      - name: Verify Service Deleted
+        if: always()
+        run: |
+          sleep 20
+          FOUND=$(duploctl service list \
+            --tenant "${{ inputs.tenant }}" \
+            --query "[?Name=='${{ inputs.service_name }}'] | length(@)" \
+            -o string)
+
+          if [ "$FOUND" = "0" ]; then
+            echo "✅ Service deleted successfully"
+          else
+            echo "❌ Service still exists"
+          fi
+
+      # ── 9. Summary ────────────────────────────────────────────────────────
+      - name: Native HPA Test Summary
+        if: always()
+        run: |
+          echo "========================================="
+          echo "  Native HPA Bug Regression Summary"
+          echo "========================================="
+          echo "Portal  : https://oneclick.duplocloud.net"
+          echo "Tenant  : ${{ inputs.tenant }}"
+          echo "Service : ${{ inputs.service_name }}"
+          echo "HPA     : min=${{ inputs.min_replicas }} max=${{ inputs.max_replicas }} cpu=${{ inputs.cpu_percent }}%"
+          echo ""
+          echo "Bug Reference:"
+          echo "  Duplo deletes HPAs created via kubectl autoscale"
+          echo "  within ~44 seconds of creation"
+          echo "  Pods reset from ${{ inputs.min_replicas }} → 1"
+          echo ""
+          echo "Steps reproduced:"
+          echo "  1. Service created via duploctl (replicas=1)"
+          echo "  2. kubectl autoscale applied (min=${{ inputs.min_replicas }})"
+          echo "  3. Polled HPA every 15s for 3 minutes"
+          echo "  4. ❌ = Duplo deleted HPA (bug present)"
+          echo "  5. ✅ = HPA survived (bug fixed)"
