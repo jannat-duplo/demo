@@ -75,7 +75,7 @@ jobs:
       - name: Setup kubeconfig
         run: |
           mkdir -p ~/.kube
-          echo "${{ inputs.kubeconfig }}" | base64 -d > ~/.kube/config
+          echo "${{ inputs.kubeconfig }}" | tr -d ' \n\r' | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
           kubectl get nodes --no-headers | awk '{print $1, $2}'
 
