@@ -10,11 +10,11 @@ on:
       tenant:
         description: "DuploCloud tenant name"
         required: true
-        default: "auto-02"
+        default: "jt1105n"
       namespace:
         description: "Kubernetes namespace"
         required: true
-        default: "duploservices-auto-02"
+        default: "duploservices-jt1105n"
       min_replicas:
         description: "KEDA ScaledObject minReplicaCount"
         required: true
