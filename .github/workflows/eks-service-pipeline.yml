@@ -1,4 +1,4 @@
-name: EKS Service Pipeline - Create, Scale, Update Image
+name: EKS Service Pipeline - Create, Scale, Update Image, Delete
 
 on:
   workflow_dispatch:
@@ -164,7 +164,33 @@ jobs:
             exit 1
           fi
 
-      # ── 8. Summary ───────────────────────────────────────────────────────
+      # ── 8. Delete service ────────────────────────────────────────────────
+      - name: Delete EKS Service
+        run: |
+          echo "Deleting service: ${{ inputs.service_name }}"
+          duploctl service delete \
+            --tenant "${{ inputs.tenant }}" \
+            "${{ inputs.service_name }}"
+
+      # ── 9. Verify service deleted ─────────────────────────────────────────
+      - name: Verify Service Deleted
+        run: |
+          sleep 20
+          FOUND=$(duploctl service list \
+            --tenant "${{ inputs.tenant }}" \
+            --query  "[?Name=='${{ inputs.service_name }}'] | length(@)" \
+            -o string)
+
+          echo "Services matching name after delete: $FOUND"
+
+          if [ "$FOUND" = "0" ]; then
+            echo "✅ Service '${{ inputs.service_name }}' successfully deleted"
+          else
+            echo "❌ Service still exists after delete"
+            exit 1
+          fi
+
+      # ── 10. Summary ───────────────────────────────────────────────────────
       - name: Pipeline Summary
         if: always()
         run: |
@@ -176,8 +202,4 @@ jobs:
           echo "Initial image : ${{ inputs.initial_image }}"
           echo "Updated image : ${{ inputs.updated_image }}"
           echo "Replicas      : ${{ inputs.initial_replicas }} → ${{ inputs.scaled_replicas }}"
-          echo ""
-          duploctl service list \
-            --tenant "${{ inputs.tenant }}" \
-            --query  "[?Name=='${{ inputs.service_name }}'].{Name:Name, Image:Template.Containers[0].Image, Replicas:Replicas, LastDeployedBy:LastDeployedBy, LastDeployedAt:LastDeployedAt}" \
-            2>&1 || true
+          echo "Delete        : Performed as final step"
