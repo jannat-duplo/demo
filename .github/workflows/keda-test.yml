@@ -27,7 +27,6 @@ on:
 env:
   DUPLO_HOST: https://oneclick.duplocloud.net
   DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
-  KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_ONECLICK }}
 
 jobs:
   keda-test:
@@ -35,20 +34,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. Install tools ──────────────────────────────────────────────────
-      - name: Install duploctl and kubectl
-        run: |
-          pip install duplocloud-client
-          curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x kubectl && mv kubectl /usr/local/bin/kubectl
-          kubectl version --client
+      # ── 1. Install duploctl ───────────────────────────────────────────────
+      - name: Duplo Setup (JIT Auth)
+        uses: duplocloud/actions/setup@main
+        with:
+          tenant: ${{ inputs.tenant }}
+        env:
+          DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+          DUPLO_HOST: https://oneclick.duplocloud.net
 
-      # ── 2. Setup kubeconfig ───────────────────────────────────────────────
+      # ── 2. Setup kubeconfig via AWS JIT ──────────────────────────────────
       - name: Setup kubeconfig
         run: |
-          mkdir -p ~/.kube
-          echo "$KUBECONFIG_DATA" > ~/.kube/config
-          chmod 600 ~/.kube/config
+          aws eks update-kubeconfig \
+            --region us-east-2 \
+            --name qa1308
           kubectl get nodes --no-headers | awk '{print $1, $2}'
 
       # ── 3. Create EKS service ─────────────────────────────────────────────
