@@ -6,7 +6,7 @@ on:
       service_name:
         description: "Service name"
         required: true
-        default: "native-hpa"
+        default: "native-hpa-git"
       tenant:
         description: "DuploCloud tenant name"
         required: true
