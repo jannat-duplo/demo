@@ -1,4 +1,4 @@
-name: EKS Service Pipeline - Create, Scale, Update Image, Delete
+name: EKS Service Pipeline - Create, Scale, Update Image, Bulk Update, Delete
 
 on:
   workflow_dispatch:
@@ -27,6 +27,10 @@ on:
         description: "Updated replica count"
         required: true
         default: "3"
+      bulk_image:
+        description: "Image to use for bulk update (both services)"
+        required: true
+        default: "nginx:1.26"
 
 env:
   DUPLO_HOST: https://oneclick.duplocloud.net
@@ -159,33 +163,106 @@ jobs:
             exit 1
           fi
 
-      # ── 8. Delete service ────────────────────────────────────────────────
-      - name: Delete EKS Service
+      # ── 8. Create second service for bulk update ─────────────────────────
+      - name: Create Second EKS Service (for bulk update)
+        run: |
+          echo "Creating second service: ${{ inputs.service_name }}-2"
+
+          cat > /tmp/service2.yaml << EOF
+          Name: ${{ inputs.service_name }}-2
+          DockerImage: ${{ inputs.initial_image }}
+          Replicas: ${{ inputs.initial_replicas }}
+          Cloud: 0
+          AgentPlatform: 7
+          OtherDockerConfig: '{"Env":null}'
+          NetworkId: default
+          EOF
+
+          duploctl service create \
+            --tenant "${{ inputs.tenant }}" \
+            --file /tmp/service2.yaml
+
+          echo "Waiting 30s for second service to start..."
+          sleep 30
+
+      # ── 9. Bulk update image (both services) ─────────────────────────────
+      - name: Bulk Update Image (${{ inputs.service_name }} + ${{ inputs.service_name }}-2 → ${{ inputs.bulk_image }})
+        run: |
+          echo "Bulk updating both services to: ${{ inputs.bulk_image }}"
+          duploctl service bulk_update_image \
+            --tenant "${{ inputs.tenant }}" \
+            -S "${{ inputs.service_name }}"   "${{ inputs.bulk_image }}" \
+            -S "${{ inputs.service_name }}-2" "${{ inputs.bulk_image }}"
+
+      # ── 10. Verify bulk update ────────────────────────────────────────────
+      - name: Verify Bulk Image Update in Duplo
+        run: |
+          echo "Waiting 45s for bulk update to propagate..."
+          sleep 45
+
+          SVC1_IMAGE=$(duploctl service list \
+            --tenant "${{ inputs.tenant }}" \
+            --query  "[?Name=='${{ inputs.service_name }}'].Template.Containers[0].Image | [0]" \
+            -o string)
+          SVC2_IMAGE=$(duploctl service list \
+            --tenant "${{ inputs.tenant }}" \
+            --query  "[?Name=='${{ inputs.service_name }}-2'].Template.Containers[0].Image | [0]" \
+            -o string)
+
+          echo "================================"
+          echo "${{ inputs.service_name }}   image: $SVC1_IMAGE"
+          echo "${{ inputs.service_name }}-2 image: $SVC2_IMAGE"
+          echo "================================"
+
+          PASS=true
+          if [ "$SVC1_IMAGE" = "${{ inputs.bulk_image }}" ]; then
+            echo "✅ ${{ inputs.service_name }} updated to ${{ inputs.bulk_image }}"
+          else
+            echo "❌ ${{ inputs.service_name }} mismatch. Expected: ${{ inputs.bulk_image }}, Got: $SVC1_IMAGE"
+            PASS=false
+          fi
+
+          if [ "$SVC2_IMAGE" = "${{ inputs.bulk_image }}" ]; then
+            echo "✅ ${{ inputs.service_name }}-2 updated to ${{ inputs.bulk_image }}"
+          else
+            echo "❌ ${{ inputs.service_name }}-2 mismatch. Expected: ${{ inputs.bulk_image }}, Got: $SVC2_IMAGE"
+            PASS=false
+          fi
+
+          [ "$PASS" = "true" ] || exit 1
+
+      # ── 11. Delete service ────────────────────────────────────────────────
+      - name: Delete EKS Services
         run: |
           echo "Deleting service: ${{ inputs.service_name }}"
           duploctl service delete \
             --tenant "${{ inputs.tenant }}" \
             "${{ inputs.service_name }}"
 
-      # ── 9. Verify service deleted ─────────────────────────────────────────
-      - name: Verify Service Deleted
+          echo "Deleting service: ${{ inputs.service_name }}-2"
+          duploctl service delete \
+            --tenant "${{ inputs.tenant }}" \
+            "${{ inputs.service_name }}-2"
+
+      # ── 12. Verify services deleted ───────────────────────────────────────
+      - name: Verify Services Deleted
         run: |
           sleep 20
           FOUND=$(duploctl service list \
             --tenant "${{ inputs.tenant }}" \
-            --query  "[?Name=='${{ inputs.service_name }}'] | length(@)" \
+            --query  "[?Name=='${{ inputs.service_name }}' || Name=='${{ inputs.service_name }}-2'] | length(@)" \
             -o string)
 
-          echo "Services matching name after delete: $FOUND"
+          echo "Services remaining after delete: $FOUND"
 
           if [ "$FOUND" = "0" ]; then
-            echo "✅ Service '${{ inputs.service_name }}' successfully deleted"
+            echo "✅ Both services successfully deleted"
           else
-            echo "❌ Service still exists after delete"
+            echo "❌ $FOUND service(s) still exist after delete"
             exit 1
           fi
 
-      # ── 10. Summary ───────────────────────────────────────────────────────
+      # ── 13. Summary ───────────────────────────────────────────────────────
       - name: Pipeline Summary
         if: always()
         run: |
@@ -193,8 +270,10 @@ jobs:
           echo "  EKS Service Pipeline Summary"
           echo "=================================="
           echo "Tenant        : ${{ inputs.tenant }}"
-          echo "Service       : ${{ inputs.service_name }}"
+          echo "Service 1     : ${{ inputs.service_name }}"
+          echo "Service 2     : ${{ inputs.service_name }}-2"
           echo "Initial image : ${{ inputs.initial_image }}"
           echo "Updated image : ${{ inputs.updated_image }}"
+          echo "Bulk image    : ${{ inputs.bulk_image }}"
           echo "Replicas      : ${{ inputs.initial_replicas }} → ${{ inputs.scaled_replicas }}"
-          echo "Delete        : Performed as final step"
+          echo "Delete        : Both services deleted as final step"
