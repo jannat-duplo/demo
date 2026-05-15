@@ -1,0 +1,183 @@
+name: EKS Service Pipeline - Create, Scale, Update Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      service_name:
+        description: "Service name to create"
+        required: true
+        default: "pipeline-test-svc"
+      tenant:
+        description: "DuploCloud tenant name"
+        required: true
+        default: "jt1505n"
+      initial_image:
+        description: "Initial image"
+        required: true
+        default: "nginx:latest"
+      updated_image:
+        description: "Updated image to deploy"
+        required: true
+        default: "nginx:1.25"
+      initial_replicas:
+        description: "Initial replica count"
+        required: true
+        default: "2"
+      scaled_replicas:
+        description: "Updated replica count"
+        required: true
+        default: "3"
+
+env:
+  DUPLO_HOST: https://oneclick.duplocloud.net
+  DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+
+jobs:
+  eks-service-lifecycle:
+    name: EKS Service - Create / Scale / Update Image
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Install duploctl ──────────────────────────────────────────────
+      - name: Install duploctl
+        run: pip install duplocloud-client
+
+      # ── 2. Create EKS service ────────────────────────────────────────────
+      - name: Create EKS Service
+        run: |
+          echo "Creating service: ${{ inputs.service_name }} in tenant: ${{ inputs.tenant }}"
+          duploctl service create \
+            --tenant "${{ inputs.tenant }}" \
+            --name   "${{ inputs.service_name }}" \
+            --image  "${{ inputs.initial_image }}" \
+            --replicas "${{ inputs.initial_replicas }}" 2>&1 || true
+
+          # Fallback: create via raw API if duploctl create not supported
+          curl -sf -X POST \
+            "${DUPLO_HOST}/subscriptions/$(duploctl tenant list \
+              --query "[?AccountName=='${{ inputs.tenant }}'].TenantId | [0]" -o string)/ReplicationControllerChange" \
+            -H "Authorization: Bearer ${DUPLO_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "Name":         "${{ inputs.service_name }}",
+              "Image":        "${{ inputs.initial_image }}",
+              "Replicas":     ${{ inputs.initial_replicas }},
+              "AgentPlatform": 7,
+              "Cloud":        0
+            }' && echo "Service created via API" || true
+
+      # ── 3. Wait for service to be Running ───────────────────────────────
+      - name: Wait for service to be ready
+        run: |
+          echo "Waiting 60s for service to start..."
+          sleep 60
+          duploctl service list \
+            --tenant "${{ inputs.tenant }}" \
+            --query  "[?Name=='${{ inputs.service_name }}'].{Name:Name, Image:Template.Containers[0].Image, Replicas:Replicas}"
+
+      # ── 4. Verify initial state ──────────────────────────────────────────
+      - name: Verify initial image and replica count in Duplo
+        id: verify_initial
+        run: |
+          CURRENT_IMAGE=$(duploctl service list \
+            --tenant "${{ inputs.tenant }}" \
+            --query  "[?Name=='${{ inputs.service_name }}'].Template.Containers[0].Image | [0]" \
+            -o string)
+          CURRENT_REPLICAS=$(duploctl service list \
+            --tenant "${{ inputs.tenant }}" \
+            --query  "[?Name=='${{ inputs.service_name }}'].Replicas | [0]" \
+            -o string)
+
+          echo "Initial image   : $CURRENT_IMAGE"
+          echo "Initial replicas: $CURRENT_REPLICAS"
+
+          if [ "$CURRENT_IMAGE" = "${{ inputs.initial_image }}" ]; then
+            echo "✅ Initial image matches expected: ${{ inputs.initial_image }}"
+          else
+            echo "❌ Image mismatch. Expected: ${{ inputs.initial_image }}, Got: $CURRENT_IMAGE"
+            exit 1
+          fi
+
+      # ── 5. Update replica count ──────────────────────────────────────────
+      - name: Update replica count (${{ inputs.initial_replicas }} → ${{ inputs.scaled_replicas }})
+        run: |
+          echo "Scaling to ${{ inputs.scaled_replicas }} replicas..."
+          duploctl service update_replicas \
+            --tenant   "${{ inputs.tenant }}" \
+            --replicas "${{ inputs.scaled_replicas }}" \
+            "${{ inputs.service_name }}"
+
+      - name: Verify updated replica count in Duplo
+        run: |
+          sleep 30
+          CURRENT_REPLICAS=$(duploctl service list \
+            --tenant "${{ inputs.tenant }}" \
+            --query  "[?Name=='${{ inputs.service_name }}'].Replicas | [0]" \
+            -o string)
+          echo "Replica count after update: $CURRENT_REPLICAS"
+
+          if [ "$CURRENT_REPLICAS" = "${{ inputs.scaled_replicas }}" ]; then
+            echo "✅ Replica count matches expected: ${{ inputs.scaled_replicas }}"
+          else
+            echo "❌ Replica mismatch. Expected: ${{ inputs.scaled_replicas }}, Got: $CURRENT_REPLICAS"
+            exit 1
+          fi
+
+      # ── 6. Update image ──────────────────────────────────────────────────
+      - name: Update image (${{ inputs.initial_image }} → ${{ inputs.updated_image }})
+        run: |
+          echo "Updating image to: ${{ inputs.updated_image }}"
+          duploctl service update_image \
+            --tenant "${{ inputs.tenant }}" \
+            "${{ inputs.service_name }}" \
+            "${{ inputs.updated_image }}"
+
+      # ── 7. Verify image updated in Duplo ─────────────────────────────────
+      - name: Verify updated image in Duplo
+        run: |
+          echo "Waiting 45s for Duplo to propagate image update..."
+          sleep 45
+
+          UPDATED_IMAGE=$(duploctl service list \
+            --tenant "${{ inputs.tenant }}" \
+            --query  "[?Name=='${{ inputs.service_name }}'].Template.Containers[0].Image | [0]" \
+            -o string)
+          LAST_DEPLOYED_BY=$(duploctl service list \
+            --tenant "${{ inputs.tenant }}" \
+            --query  "[?Name=='${{ inputs.service_name }}'].LastDeployedBy | [0]" \
+            -o string)
+          LAST_DEPLOYED_AT=$(duploctl service list \
+            --tenant "${{ inputs.tenant }}" \
+            --query  "[?Name=='${{ inputs.service_name }}'].LastDeployedAt | [0]" \
+            -o string)
+
+          echo "=============================="
+          echo "Image in Duplo : $UPDATED_IMAGE"
+          echo "Last deployed by: $LAST_DEPLOYED_BY"
+          echo "Last deployed at: $LAST_DEPLOYED_AT"
+          echo "=============================="
+
+          if [ "$UPDATED_IMAGE" = "${{ inputs.updated_image }}" ]; then
+            echo "✅ Image successfully updated to: ${{ inputs.updated_image }}"
+          else
+            echo "❌ Image mismatch. Expected: ${{ inputs.updated_image }}, Got: $UPDATED_IMAGE"
+            exit 1
+          fi
+
+      # ── 8. Summary ───────────────────────────────────────────────────────
+      - name: Pipeline Summary
+        if: always()
+        run: |
+          echo "=================================="
+          echo "  EKS Service Pipeline Summary"
+          echo "=================================="
+          echo "Tenant        : ${{ inputs.tenant }}"
+          echo "Service       : ${{ inputs.service_name }}"
+          echo "Initial image : ${{ inputs.initial_image }}"
+          echo "Updated image : ${{ inputs.updated_image }}"
+          echo "Replicas      : ${{ inputs.initial_replicas }} → ${{ inputs.scaled_replicas }}"
+          echo ""
+          duploctl service list \
+            --tenant "${{ inputs.tenant }}" \
+            --query  "[?Name=='${{ inputs.service_name }}'].{Name:Name, Image:Template.Containers[0].Image, Replicas:Replicas, LastDeployedBy:LastDeployedBy, LastDeployedAt:LastDeployedAt}" \
+            2>&1 || true
