@@ -182,8 +182,8 @@ jobs:
             --tenant "${{ inputs.tenant }}" \
             --file /tmp/service2.yaml
 
-          echo "Waiting 30s for second service to start..."
-          sleep 30
+          echo "Waiting 90s for second service to be reconciled by Duplo..."
+          sleep 90
 
       # ── 9. Bulk update image (both services) ─────────────────────────────
       - name: Bulk Update Image (${{ inputs.service_name }} + ${{ inputs.service_name }}-2 → ${{ inputs.bulk_image }})
