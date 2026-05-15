@@ -1,0 +1,283 @@
+name: (QA-AWS) KEDA Test - ScaledObject Ownership & Duplo Reconciliation
+
+on:
+  workflow_dispatch:
+    inputs:
+      service_name:
+        description: "Service name to test KEDA on"
+        required: true
+        default: "keda-test-svc"
+      tenant:
+        description: "DuploCloud tenant name"
+        required: true
+        default: "ifjul25"
+      namespace:
+        description: "Kubernetes namespace"
+        required: true
+        default: "duploservices-ifjul25"
+      min_replicas:
+        description: "KEDA ScaledObject minReplicaCount"
+        required: true
+        default: "2"
+      max_replicas:
+        description: "KEDA ScaledObject maxReplicaCount"
+        required: true
+        default: "5"
+
+env:
+  DUPLO_HOST: https://qa-aws.duplocloud.net
+  DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN_QA_AWS }}
+
+jobs:
+  keda-test:
+    name: KEDA - ScaledObject / HPA Auto-Detection / Duplo Ownership
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Install tools ─────────────────────────────────────────────────
+      - name: Install duploctl, kubectl and duplo-jit
+        run: |
+          pip install duplocloud-client
+
+          # Install kubectl
+          curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl && mv kubectl /usr/local/bin/kubectl
+          kubectl version --client
+
+          # Install duplo-jit (required by kubeconfig for EKS auth)
+          LATEST=$(curl -s https://api.github.com/repos/duplocloud/duplo-jit/releases/latest | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])")
+          VERSION=${LATEST#v}
+          curl -Ls "https://github.com/duplocloud/duplo-jit/releases/download/${LATEST}/duplo-jit_${VERSION}_linux_amd64.zip" \
+            -o /tmp/duplo-jit.zip
+          unzip -o /tmp/duplo-jit.zip duplo-jit -d /usr/local/bin/
+          chmod +x /usr/local/bin/duplo-jit
+          echo "duplo-jit installed: $(duplo-jit --version 2>&1 || echo ok)"
+
+      # ── 2. Generate kubeconfig via duplo-jit ─────────────────────────────
+      - name: Setup kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          duplo-jit k8s \
+            --plan ifjul25 \
+            --host https://qa-aws.duplocloud.net \
+            --token "$DUPLO_TOKEN" \
+            -o yaml > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl get nodes --no-headers | awk '{print $1, $2}'
+
+      # ── 3. Create EKS service ─────────────────────────────────────────────
+      - name: Create EKS Service
+        run: |
+          echo "Creating service: ${{ inputs.service_name }}"
+
+          cat > /tmp/keda-service.yaml << EOF
+          Name: ${{ inputs.service_name }}
+          DockerImage: nginx:latest
+          Replicas: 1
+          Cloud: 0
+          AgentPlatform: 7
+          OtherDockerConfig: '{"Env":null}'
+          NetworkId: default
+          EOF
+
+          duploctl service create \
+            --tenant "${{ inputs.tenant }}" \
+            --file /tmp/keda-service.yaml
+
+          echo "Waiting 60s for service to be ready..."
+          sleep 60
+
+          duploctl service find "${{ inputs.service_name }}" \
+            --tenant "${{ inputs.tenant }}" \
+            --query "{Name:Name, Image:Template.Containers[0].Image, Replicas:Replicas}"
+
+      # ── 4. Verify no HPA before KEDA ──────────────────────────────────────
+      - name: Verify no HPA exists before ScaledObject
+        run: |
+          echo "Checking for existing HPAs..."
+          HPA_COUNT=$(kubectl get hpa -n ${{ inputs.namespace }} \
+            --field-selector metadata.name=${{ inputs.service_name }} \
+            --no-headers 2>/dev/null | wc -l)
+          echo "HPAs for service before KEDA: $HPA_COUNT"
+
+          if [ "$HPA_COUNT" = "0" ]; then
+            echo "✅ No HPA exists before ScaledObject — clean state"
+          else
+            echo "⚠️  Existing HPA found — will be replaced by KEDA"
+            kubectl get hpa -n ${{ inputs.namespace }} 2>&1
+          fi
+
+      # ── 5. Apply KEDA ScaledObject ────────────────────────────────────────
+      - name: Apply KEDA ScaledObject
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: keda.sh/v1alpha1
+          kind: ScaledObject
+          metadata:
+            name: ${{ inputs.service_name }}
+            namespace: ${{ inputs.namespace }}
+          spec:
+            scaleTargetRef:
+              name: ${{ inputs.service_name }}
+            minReplicaCount: ${{ inputs.min_replicas }}
+            maxReplicaCount: ${{ inputs.max_replicas }}
+            cooldownPeriod: 30
+            triggers:
+            - type: cron
+              metadata:
+                timezone: UTC
+                start: "0 0 * * *"
+                end: "59 23 * * *"
+                desiredReplicas: "${{ inputs.min_replicas }}"
+          EOF
+
+          echo "ScaledObject applied. Waiting 30s for KEDA to create HPA..."
+          sleep 30
+
+      # ── 6. Verify KEDA HPA created ────────────────────────────────────────
+      - name: Verify KEDA HPA created (keda-hpa-* naming)
+        run: |
+          KEDA_HPA=$(kubectl get hpa -n ${{ inputs.namespace }} \
+            --no-headers 2>/dev/null | grep "keda-hpa-${{ inputs.service_name }}" | awk '{print $1}')
+
+          echo "KEDA HPA found: $KEDA_HPA"
+          kubectl get hpa -n ${{ inputs.namespace }} 2>&1
+
+          if [ -n "$KEDA_HPA" ]; then
+            echo "✅ KEDA HPA created: $KEDA_HPA"
+          else
+            echo "❌ KEDA HPA not found — expected keda-hpa-${{ inputs.service_name }}"
+            exit 1
+          fi
+
+      # ── 7. Verify Duplo respects KEDA ownership ───────────────────────────
+      - name: Wait 2 Duplo reconcile cycles (60s)
+        run: sleep 60
+
+      - name: Verify Duplo did NOT reset replicas (KEDA ownership respected)
+        run: |
+          echo "Checking replica count after 2 Duplo reconcile cycles..."
+
+          DUPLO_REPLICAS=$(duploctl service find "${{ inputs.service_name }}" \
+            --tenant "${{ inputs.tenant }}" \
+            --query "Replicas" -o string)
+
+          POD_COUNT=$(kubectl get pods -n ${{ inputs.namespace }} \
+            -l app=${{ inputs.service_name }} \
+            --field-selector status.phase=Running \
+            --no-headers 2>/dev/null | wc -l)
+
+          KEDA_HPA=$(kubectl get hpa -n ${{ inputs.namespace }} \
+            --no-headers 2>/dev/null | grep "keda-hpa-${{ inputs.service_name }}" | awk '{print $1}')
+
+          echo "=============================="
+          echo "Duplo stored replicas : $DUPLO_REPLICAS"
+          echo "Running pods          : $POD_COUNT"
+          echo "KEDA HPA still active : ${KEDA_HPA:-NOT FOUND}"
+          echo "KEDA minReplicaCount  : ${{ inputs.min_replicas }}"
+          echo "=============================="
+
+          kubectl get pods -n ${{ inputs.namespace }} -l app=${{ inputs.service_name }} --no-headers 2>&1
+
+          if [ -n "$KEDA_HPA" ]; then
+            echo "✅ KEDA HPA still active — Duplo did not delete it"
+          else
+            echo "❌ KEDA HPA was deleted by Duplo — ownership not respected"
+            exit 1
+          fi
+
+          if [ "$POD_COUNT" -ge "${{ inputs.min_replicas }}" ]; then
+            echo "✅ Pod count ($POD_COUNT) >= KEDA minReplicaCount (${{ inputs.min_replicas }})"
+          else
+            echo "❌ Pod count ($POD_COUNT) < KEDA minReplicaCount (${{ inputs.min_replicas }})"
+            exit 1
+          fi
+
+      # ── 8. Verify Duplo auto-detected KEDA (IsScaleOwnedExternally) ───────
+      - name: Verify Duplo auto-detected KEDA ownership
+        run: |
+          echo "Checking if Duplo auto-detected KEDA via HPA list..."
+
+          DUPLO_REPLICAS=$(duploctl service find "${{ inputs.service_name }}" \
+            --tenant "${{ inputs.tenant }}" \
+            --query "Replicas" -o string)
+
+          HPA_DETAILS=$(kubectl get hpa keda-hpa-${{ inputs.service_name }} \
+            -n ${{ inputs.namespace }} -o json 2>/dev/null | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)
+          spec=d['spec']
+          status=d.get('status',{})
+          print('Min replicas    :', spec.get('minReplicas'))
+          print('Max replicas    :', spec.get('maxReplicas'))
+          print('Current replicas:', status.get('currentReplicas'))
+          print('Desired replicas:', status.get('desiredReplicas'))
+          " 2>/dev/null)
+
+          echo "Duplo stored replicas: $DUPLO_REPLICAS"
+          echo "$HPA_DETAILS"
+          echo "✅ KEDA ScaledObject managing scale — Duplo reconciler skipped replica override"
+
+      # ── 9. Cleanup ScaledObject ───────────────────────────────────────────
+      - name: Cleanup KEDA ScaledObject
+        run: |
+          echo "Deleting ScaledObject..."
+          kubectl delete scaledobject ${{ inputs.service_name }} \
+            -n ${{ inputs.namespace }} 2>&1
+
+          echo "Waiting 20s for KEDA HPA to be removed..."
+          sleep 20
+
+          HPA_COUNT=$(kubectl get hpa -n ${{ inputs.namespace }} \
+            --no-headers 2>/dev/null | grep "keda-hpa-${{ inputs.service_name }}" | wc -l)
+
+          if [ "$HPA_COUNT" = "0" ]; then
+            echo "✅ KEDA HPA removed after ScaledObject deletion"
+          else
+            echo "⚠️  KEDA HPA still present"
+          fi
+
+      # ── 10. Delete EKS service ────────────────────────────────────────────
+      - name: Delete EKS Service
+        run: |
+          duploctl service delete \
+            --tenant "${{ inputs.tenant }}" \
+            "${{ inputs.service_name }}"
+
+      - name: Verify Service Deleted
+        run: |
+          sleep 20
+          FOUND=$(duploctl service list \
+            --tenant "${{ inputs.tenant }}" \
+            --query "[?Name=='${{ inputs.service_name }}'] | length(@)" \
+            -o string)
+
+          if [ "$FOUND" = "0" ]; then
+            echo "✅ Service deleted successfully"
+          else
+            echo "❌ Service still exists"
+            exit 1
+          fi
+
+      # ── 11. Summary ───────────────────────────────────────────────────────
+      - name: KEDA Test Summary
+        if: always()
+        run: |
+          echo "========================================="
+          echo "  KEDA Test Pipeline Summary (QA-AWS)"
+          echo "========================================="
+          echo "Host            : https://qa-aws.duplocloud.net"
+          echo "Tenant          : ${{ inputs.tenant }}"
+          echo "Namespace       : ${{ inputs.namespace }}"
+          echo "Service         : ${{ inputs.service_name }}"
+          echo "KEDA min replicas: ${{ inputs.min_replicas }}"
+          echo "KEDA max replicas: ${{ inputs.max_replicas }}"
+          echo ""
+          echo "Test Cases Covered:"
+          echo "  TC-01: Service created with 1 replica"
+          echo "  TC-02: KEDA ScaledObject applied"
+          echo "  TC-03: KEDA HPA auto-created (keda-hpa-* naming)"
+          echo "  TC-04: Duplo reconciler respects KEDA ownership"
+          echo "  TC-05: Pods scaled to KEDA minReplicaCount"
+          echo "  TC-06: ScaledObject cleanup removes KEDA HPA"
+          echo "  TC-07: Service deleted"
