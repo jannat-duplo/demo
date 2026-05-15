@@ -34,11 +34,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. Install duploctl ───────────────────────────────────────────────
+      # ── 1. Install duploctl + JIT AWS auth ───────────────────────────────
       - name: Duplo Setup (JIT Auth)
-        uses: duplocloud/actions/setup@main
+        uses: duplocloud/actions@main
         with:
-          tenant: ${{ inputs.tenant }}
+          account-id: ${{ inputs.tenant }}
         env:
           DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
           DUPLO_HOST: https://oneclick.duplocloud.net
