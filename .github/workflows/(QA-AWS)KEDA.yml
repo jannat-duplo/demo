@@ -53,15 +53,11 @@ jobs:
           chmod +x /usr/local/bin/duplo-jit
           echo "duplo-jit installed: $(duplo-jit --version 2>&1 || echo ok)"
 
-      # ── 2. Generate kubeconfig via duplo-jit ─────────────────────────────
+      # ── 2. Setup kubeconfig from secret ──────────────────────────────────
       - name: Setup kubeconfig
         run: |
           mkdir -p ~/.kube
-          duplo-jit k8s \
-            --plan ifjul25 \
-            --host https://qa-aws.duplocloud.net \
-            --token "$DUPLO_TOKEN" \
-            -o yaml > ~/.kube/config
+          echo "${{ secrets.KUBECONFIG_QA_AWS }}" > ~/.kube/config
           chmod 600 ~/.kube/config
           kubectl get nodes --no-headers | awk '{print $1, $2}'
 
