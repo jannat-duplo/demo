@@ -11,7 +11,7 @@ on:
         description: "DuploCloud API token"
         required: true
       kubeconfig:
-        description: "Kubeconfig content (paste full YAML)"
+        description: "Kubeconfig base64-encoded (run: cat kubeconfig.yaml | base64)"
         required: true
       service_name:
         description: "Service name"
@@ -75,7 +75,7 @@ jobs:
       - name: Setup kubeconfig
         run: |
           mkdir -p ~/.kube
-          echo "${{ inputs.kubeconfig }}" > ~/.kube/config
+          echo "${{ inputs.kubeconfig }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
           kubectl get nodes --no-headers | awk '{print $1, $2}'
 
