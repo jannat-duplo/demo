@@ -34,21 +34,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. Install duploctl + JIT AWS auth ───────────────────────────────
-      - name: Duplo Setup (JIT Auth)
-        uses: duplocloud/actions@main
-        with:
-          account-id: ${{ inputs.tenant }}
-        env:
-          DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
-          DUPLO_HOST: https://oneclick.duplocloud.net
+      # ── 1. Install tools ─────────────────────────────────────────────────
+      - name: Install duploctl, kubectl and duplo-jit
+        run: |
+          pip install duplocloud-client
 
-      # ── 2. Setup kubeconfig via AWS JIT ──────────────────────────────────
+          # Install kubectl
+          curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl && mv kubectl /usr/local/bin/kubectl
+          kubectl version --client
+
+          # Install duplo-jit (required by kubeconfig for EKS auth)
+          LATEST=$(curl -s https://api.github.com/repos/duplocloud/duplo-jit/releases/latest | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])")
+          curl -Ls "https://github.com/duplocloud/duplo-jit/releases/download/${LATEST}/duplo-jit-linux-amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin/
+          echo "duplo-jit installed: $(duplo-jit --version 2>&1 || echo ok)"
+
+      # ── 2. Setup kubeconfig from secret ──────────────────────────────────
       - name: Setup kubeconfig
         run: |
-          aws eks update-kubeconfig \
-            --region us-east-2 \
-            --name qa1308
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_ONECLICK }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
           kubectl get nodes --no-headers | awk '{print $1, $2}'
 
       # ── 3. Create EKS service ─────────────────────────────────────────────
