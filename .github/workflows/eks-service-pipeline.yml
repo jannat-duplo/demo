@@ -46,25 +46,20 @@ jobs:
       - name: Create EKS Service
         run: |
           echo "Creating service: ${{ inputs.service_name }} in tenant: ${{ inputs.tenant }}"
+
+          cat > /tmp/service.yaml << EOF
+          Name: ${{ inputs.service_name }}
+          DockerImage: ${{ inputs.initial_image }}
+          Replicas: ${{ inputs.initial_replicas }}
+          Cloud: 0
+          AgentPlatform: 7
+          OtherDockerConfig: '{"Env":null}'
+          NetworkId: default
+          EOF
+
           duploctl service create \
             --tenant "${{ inputs.tenant }}" \
-            --name   "${{ inputs.service_name }}" \
-            --image  "${{ inputs.initial_image }}" \
-            --replicas "${{ inputs.initial_replicas }}" 2>&1 || true
-
-          # Fallback: create via raw API if duploctl create not supported
-          curl -sf -X POST \
-            "${DUPLO_HOST}/subscriptions/$(duploctl tenant list \
-              --query "[?AccountName=='${{ inputs.tenant }}'].TenantId | [0]" -o string)/ReplicationControllerChange" \
-            -H "Authorization: Bearer ${DUPLO_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "Name":         "${{ inputs.service_name }}",
-              "Image":        "${{ inputs.initial_image }}",
-              "Replicas":     ${{ inputs.initial_replicas }},
-              "AgentPlatform": 7,
-              "Cloud":        0
-            }' && echo "Service created via API" || true
+            --file /tmp/service.yaml
 
       # ── 3. Wait for service to be Running ───────────────────────────────
       - name: Wait for service to be ready
