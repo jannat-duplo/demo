@@ -10,11 +10,11 @@ on:
       tenant:
         description: "DuploCloud tenant name"
         required: true
-        default: "jt1505n"
+        default: "jt1805n"
       namespace:
         description: "Kubernetes namespace"
         required: true
-        default: "duploservices-jt1505n"
+        default: "duploservices-jt1805n"
       min_replicas:
         description: "HPA min replicas"
         required: true
