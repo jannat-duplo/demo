@@ -3,16 +3,6 @@ name: (Oneclick) Native HPA Test - Duplo Deletes kubectl autoscale HPA
 on:
   workflow_dispatch:
     inputs:
-      duplo_host:
-        description: "DuploCloud portal URL"
-        required: true
-        default: "https://oneclick.duplocloud.net"
-      duplo_token:
-        description: "DuploCloud API token"
-        required: true
-      kubeconfig:
-        description: "Kubeconfig base64-encoded (run: cat kubeconfig.yaml | base64)"
-        required: true
       service_name:
         description: "Service name"
         required: true
@@ -39,8 +29,8 @@ on:
         default: "50"
 
 env:
-  DUPLO_HOST: ${{ inputs.duplo_host }}
-  DUPLO_TOKEN: ${{ inputs.duplo_token }}
+  DUPLO_HOST: https://oneclick.duplocloud.net
+  DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
 
 jobs:
   native-hpa-test:
@@ -48,13 +38,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. Mask token ─────────────────────────────────────────────────────
-      - name: Mask sensitive inputs
-        run: |
-          echo "::add-mask::${{ inputs.duplo_token }}"
-          echo "::add-mask::${{ inputs.kubeconfig }}"
-
-      # ── 2. Install tools ──────────────────────────────────────────────────
+      # ── 1. Install tools ──────────────────────────────────────────────────
       - name: Install duploctl, kubectl and duplo-jit
         run: |
           pip install duplocloud-client
@@ -71,15 +55,15 @@ jobs:
           chmod +x /usr/local/bin/duplo-jit
           echo "duplo-jit installed: $(duplo-jit --version 2>&1 || echo ok)"
 
-      # ── 3. Setup kubeconfig ───────────────────────────────────────────────
+      # ── 2. Setup kubeconfig ───────────────────────────────────────────────
       - name: Setup kubeconfig
         run: |
           mkdir -p ~/.kube
-          echo "${{ inputs.kubeconfig }}" | tr -d ' \n\r' | base64 -d > ~/.kube/config
+          echo "${{ secrets.KUBECONFIG_ONECLICK }}" > ~/.kube/config
           chmod 600 ~/.kube/config
           kubectl get nodes --no-headers | awk '{print $1, $2}'
 
-      # ── 4. Create EKS service (replicas = 1) ─────────────────────────────
+      # ── 3. Create EKS service (replicas = 1) ─────────────────────────────
       - name: Create EKS Service (replicas=1)
         run: |
           echo "Creating service: ${{ inputs.service_name }}"
@@ -105,7 +89,7 @@ jobs:
             --tenant "${{ inputs.tenant }}" \
             --query "{Name:Name, Image:Template.Containers[0].Image, Replicas:Replicas}"
 
-      # ── 5. Verify no HPA before applying ─────────────────────────────────
+      # ── 4. Verify no HPA before applying ─────────────────────────────────
       - name: Verify no HPA exists before applying
         run: |
           HPA_COUNT=$(kubectl get hpa -n ${{ inputs.namespace }} \
@@ -121,7 +105,7 @@ jobs:
             sleep 10
           fi
 
-      # ── 6. Apply HPA via kubectl autoscale (exact bug reproduction) ───────
+      # ── 5. Apply HPA via kubectl autoscale (exact bug reproduction) ───────
       - name: Apply HPA via kubectl autoscale
         run: |
           echo "Applying: kubectl autoscale deployment/${{ inputs.service_name }} --min=${{ inputs.min_replicas }} --max=${{ inputs.max_replicas }} --cpu-percent=${{ inputs.cpu_percent }}"
@@ -144,7 +128,7 @@ jobs:
             --no-headers 2>/dev/null | wc -l)
           echo "Pods running: $POD_COUNT (expected >= ${{ inputs.min_replicas }})"
 
-      # ── 7. Poll HPA every 15s for 3 minutes — detect if Duplo deletes it ─
+      # ── 6. Poll HPA every 15s for 3 minutes — detect if Duplo deletes it ─
       - name: Poll HPA every 15s — detect Duplo deletion (3 min window)
         run: |
           echo "Polling HPA every 15s for 3 minutes..."
@@ -183,7 +167,7 @@ jobs:
             echo "=========================================="
           fi
 
-      # ── 8. Final state check ──────────────────────────────────────────────
+      # ── 7. Final state check ──────────────────────────────────────────────
       - name: Final state verification
         run: |
           HPA=$(kubectl get hpa "${{ inputs.service_name }}" \
@@ -214,7 +198,7 @@ jobs:
             echo "✅ PASS — HPA still active"
           fi
 
-      # ── 9. Cleanup ────────────────────────────────────────────────────────
+      # ── 8. Cleanup ────────────────────────────────────────────────────────
       - name: Cleanup HPA and Service
         if: always()
         run: |
@@ -240,14 +224,14 @@ jobs:
             echo "❌ Service still exists"
           fi
 
-      # ── 10. Summary ───────────────────────────────────────────────────────
+      # ── 9. Summary ────────────────────────────────────────────────────────
       - name: Native HPA Test Summary
         if: always()
         run: |
           echo "========================================="
           echo "  Native HPA Bug Regression Summary"
           echo "========================================="
-          echo "Portal  : ${{ inputs.duplo_host }}"
+          echo "Portal  : https://oneclick.duplocloud.net"
           echo "Tenant  : ${{ inputs.tenant }}"
           echo "Service : ${{ inputs.service_name }}"
           echo "HPA     : min=${{ inputs.min_replicas }} max=${{ inputs.max_replicas }} cpu=${{ inputs.cpu_percent }}%"
