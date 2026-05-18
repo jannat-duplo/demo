@@ -147,8 +147,8 @@ jobs:
           fi
 
       # ── 7. Verify Duplo respects KEDA ownership ───────────────────────────
-      - name: Wait 2 Duplo reconcile cycles (60s)
-        run: sleep 60
+      - name: Wait 5 Duplo reconcile cycles (60s)
+        run: sleep 300
 
       - name: Verify Duplo did NOT reset replicas (KEDA ownership respected)
         run: |
