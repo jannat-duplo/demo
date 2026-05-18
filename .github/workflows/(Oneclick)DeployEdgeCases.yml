@@ -1,0 +1,252 @@
+name: (Oneclick) Deploy Edge Cases - Image Propagation Regression
+
+on:
+  workflow_dispatch:
+    inputs:
+      service_name:
+        description: "Service name to test"
+        required: true
+        default: "edge-case-svc"
+      tenant:
+        description: "DuploCloud tenant name"
+        required: true
+        default: "jt1805n"
+      namespace:
+        description: "Kubernetes namespace"
+        required: true
+        default: "duploservices-jt1805n"
+
+env:
+  DUPLO_HOST: https://oneclick.duplocloud.net
+  DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+
+jobs:
+  edge-case-test:
+    name: Deploy Edge Cases - Image Propagation
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Install tools ──────────────────────────────────────────────────
+      - name: Install duploctl, kubectl and duplo-jit
+        run: |
+          pip install duplocloud-client
+
+          curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl && mv kubectl /usr/local/bin/kubectl
+
+          LATEST=$(curl -s https://api.github.com/repos/duplocloud/duplo-jit/releases/latest | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])")
+          VERSION=${LATEST#v}
+          curl -Ls "https://github.com/duplocloud/duplo-jit/releases/download/${LATEST}/duplo-jit_${VERSION}_linux_amd64.zip" \
+            -o /tmp/duplo-jit.zip
+          unzip -o /tmp/duplo-jit.zip duplo-jit -d /usr/local/bin/
+          chmod +x /usr/local/bin/duplo-jit
+
+      # ── 2. Setup kubeconfig ───────────────────────────────────────────────
+      - name: Setup kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_ONECLICK }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl get nodes --no-headers | awk '{print $1, $2}'
+
+      # ── 3. Create service ─────────────────────────────────────────────────
+      - name: Create EKS Service
+        run: |
+          cat > /tmp/edge-svc.yaml << EOF
+          Name: ${{ inputs.service_name }}
+          DockerImage: nginx:1.21
+          Replicas: 1
+          Cloud: 0
+          AgentPlatform: 7
+          OtherDockerConfig: '{"Env":null}'
+          NetworkId: default
+          EOF
+
+          duploctl service create \
+            --tenant "${{ inputs.tenant }}" \
+            --file /tmp/edge-svc.yaml
+
+          echo "Waiting 60s for service to be ready..."
+          sleep 60
+
+          duploctl service find "${{ inputs.service_name }}" \
+            --tenant "${{ inputs.tenant }}" \
+            --query "{Name:Name, Image:Template.Containers[0].Image, Replicas:Replicas}"
+
+      # ── helper function saved to file for reuse ───────────────────────────
+      - name: Save image-check helper
+        run: |
+          cat > /tmp/check_image.sh << 'SCRIPT'
+          #!/bin/bash
+          # Usage: check_image.sh <service_name> <tenant> <namespace> <expected_image> <test_name>
+          SVC=$1; TENANT=$2; NS=$3; EXPECTED=$4; TEST=$5
+
+          echo "Waiting 2 minutes for K8s to propagate..."
+          sleep 120
+
+          DUPLO_IMG=$(duploctl service find "$SVC" \
+            --tenant "$TENANT" \
+            --query "Template.Containers[0].Image" -o string)
+
+          K8S_IMG=$(kubectl get deployment "$SVC" -n "$NS" \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)
+
+          echo "[$TEST] Expected : $EXPECTED"
+          echo "[$TEST] Duplo    : $DUPLO_IMG"
+          echo "[$TEST] K8s      : $K8S_IMG"
+
+          if [ "$DUPLO_IMG" = "$EXPECTED" ] && [ "$K8S_IMG" = "$EXPECTED" ]; then
+            echo "[$TEST] ✅ PASS — Duplo and K8s both show correct image"
+          elif [ "$DUPLO_IMG" = "$EXPECTED" ] && [ "$K8S_IMG" != "$EXPECTED" ]; then
+            echo "[$TEST] ❌ BUG REPRODUCED — Duplo updated but K8s not patched!"
+            echo "[$TEST] Duplo=$DUPLO_IMG | K8s=$K8S_IMG"
+            exit 1
+          elif [ "$DUPLO_IMG" != "$EXPECTED" ]; then
+            echo "[$TEST] ⚠️  Duplo not yet updated — Expected=$EXPECTED Got=$DUPLO_IMG"
+            exit 1
+          fi
+          SCRIPT
+          chmod +x /tmp/check_image.sh
+
+      # ── EC-01: Rapid successive updates ───────────────────────────────────
+      - name: "EC-01: Rapid successive image updates (no wait between)"
+        run: |
+          echo "=== EC-01: Rapid successive updates ==="
+          duploctl service update_image --tenant "${{ inputs.tenant }}" "${{ inputs.service_name }}" "nginx:1.22"
+          sleep 2
+          duploctl service update_image --tenant "${{ inputs.tenant }}" "${{ inputs.service_name }}" "nginx:1.23"
+          sleep 2
+          duploctl service update_image --tenant "${{ inputs.tenant }}" "${{ inputs.service_name }}" "nginx:1.24"
+
+          bash /tmp/check_image.sh \
+            "${{ inputs.service_name }}" "${{ inputs.tenant }}" "${{ inputs.namespace }}" \
+            "nginx:1.24" "EC-01"
+
+      # ── EC-02: Re-deploy same image tag ───────────────────────────────────
+      - name: "EC-02: Re-deploy same image tag"
+        run: |
+          echo "=== EC-02: Same image tag re-deploy ==="
+          duploctl service update_image --tenant "${{ inputs.tenant }}" "${{ inputs.service_name }}" "nginx:1.24"
+          sleep 5
+          duploctl service update_image --tenant "${{ inputs.tenant }}" "${{ inputs.service_name }}" "nginx:1.24"
+
+          bash /tmp/check_image.sh \
+            "${{ inputs.service_name }}" "${{ inputs.tenant }}" "${{ inputs.namespace }}" \
+            "nginx:1.24" "EC-02"
+
+      # ── EC-03: Simultaneous image + replica update ─────────────────────────
+      - name: "EC-03: Simultaneous image and replica update"
+        run: |
+          echo "=== EC-03: Simultaneous image + replica update ==="
+          duploctl service update_image --tenant "${{ inputs.tenant }}" "${{ inputs.service_name }}" "nginx:1.25" &
+          duploctl service update_replicas --tenant "${{ inputs.tenant }}" --replicas 2 "${{ inputs.service_name }}" &
+          wait
+
+          bash /tmp/check_image.sh \
+            "${{ inputs.service_name }}" "${{ inputs.tenant }}" "${{ inputs.namespace }}" \
+            "nginx:1.25" "EC-03"
+
+      # ── EC-04: Many consecutive deploys (15x) ─────────────────────────────
+      - name: "EC-04: 15 consecutive image updates"
+        run: |
+          echo "=== EC-04: 15 consecutive deploys ==="
+          IMAGES=("nginx:1.21" "nginx:1.22" "nginx:1.23" "nginx:1.24" "nginx:1.25" \
+                  "nginx:1.21" "nginx:1.22" "nginx:1.23" "nginx:1.24" "nginx:1.25" \
+                  "nginx:1.21" "nginx:1.22" "nginx:1.23" "nginx:1.24" "nginx:stable")
+
+          for i in "${!IMAGES[@]}"; do
+            IMG="${IMAGES[$i]}"
+            echo "Deploy $((i+1))/15: $IMG"
+            duploctl service update_image --tenant "${{ inputs.tenant }}" "${{ inputs.service_name }}" "$IMG"
+            sleep 5
+          done
+
+          bash /tmp/check_image.sh \
+            "${{ inputs.service_name }}" "${{ inputs.tenant }}" "${{ inputs.namespace }}" \
+            "nginx:stable" "EC-04"
+
+      # ── EC-05: Update after kubectl rollback ──────────────────────────────
+      - name: "EC-05: Update image after kubectl rollout undo"
+        run: |
+          echo "=== EC-05: Update after rollback ==="
+          duploctl service update_image --tenant "${{ inputs.tenant }}" "${{ inputs.service_name }}" "nginx:1.25"
+          sleep 30
+
+          echo "Performing kubectl rollout undo..."
+          kubectl rollout undo deployment/"${{ inputs.service_name }}" -n "${{ inputs.namespace }}"
+          sleep 20
+
+          echo "Now updating image via Duplo after rollback..."
+          duploctl service update_image --tenant "${{ inputs.tenant }}" "${{ inputs.service_name }}" "nginx:latest"
+
+          bash /tmp/check_image.sh \
+            "${{ inputs.service_name }}" "${{ inputs.tenant }}" "${{ inputs.namespace }}" \
+            "nginx:latest" "EC-05"
+
+      # ── EC-06: Update image while Duplo HPA exists ────────────────────────
+      - name: "EC-06: Update image with active Duplo HPA"
+        run: |
+          echo "=== EC-06: Image update with active HPA ==="
+          echo "Creating Duplo-managed HPA via kubectl..."
+          cat <<EOF | kubectl apply -f -
+          apiVersion: autoscaling/v2
+          kind: HorizontalPodAutoscaler
+          metadata:
+            name: ${{ inputs.service_name }}
+            namespace: ${{ inputs.namespace }}
+          spec:
+            scaleTargetRef:
+              apiVersion: apps/v1
+              kind: Deployment
+              name: ${{ inputs.service_name }}
+            minReplicas: 1
+            maxReplicas: 3
+            metrics:
+            - type: Resource
+              resource:
+                name: cpu
+                target:
+                  type: Utilization
+                  averageUtilization: 80
+          EOF
+
+          sleep 10
+          echo "Now updating image with HPA active..."
+          duploctl service update_image --tenant "${{ inputs.tenant }}" "${{ inputs.service_name }}" "nginx:1.26"
+
+          bash /tmp/check_image.sh \
+            "${{ inputs.service_name }}" "${{ inputs.tenant }}" "${{ inputs.namespace }}" \
+            "nginx:1.26" "EC-06"
+
+          echo "Cleaning up HPA..."
+          kubectl delete hpa "${{ inputs.service_name }}" -n "${{ inputs.namespace }}" 2>/dev/null || true
+
+      # ── 4. Cleanup ────────────────────────────────────────────────────────
+      - name: Cleanup service
+        if: always()
+        run: |
+          duploctl service delete \
+            --tenant "${{ inputs.tenant }}" \
+            "${{ inputs.service_name }}" 2>/dev/null || true
+
+      # ── 5. Summary ────────────────────────────────────────────────────────
+      - name: Edge Case Summary
+        if: always()
+        run: |
+          echo "=============================================="
+          echo "  Deploy Edge Cases Summary (Oneclick)"
+          echo "=============================================="
+          echo "Host    : https://oneclick.duplocloud.net"
+          echo "Tenant  : ${{ inputs.tenant }}"
+          echo "Service : ${{ inputs.service_name }}"
+          echo ""
+          echo "Edge Cases Tested:"
+          echo "  EC-01: Rapid successive image updates (no wait)"
+          echo "  EC-02: Re-deploy same image tag"
+          echo "  EC-03: Simultaneous image + replica update"
+          echo "  EC-04: 15 consecutive image updates"
+          echo "  EC-05: Image update after kubectl rollout undo"
+          echo "  EC-06: Image update with active HPA"
+          echo ""
+          echo "A ❌ BUG REPRODUCED means Duplo updated its DB"
+          echo "but K8s deployment spec was NOT patched."
