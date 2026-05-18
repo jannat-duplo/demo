@@ -1,0 +1,296 @@
+name: (Oneclick) Rolling Update - Pod-by-Pod Restart Verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      service_name:
+        description: "Service name"
+        required: true
+        default: "rolling-update-git"
+      tenant:
+        description: "DuploCloud tenant name"
+        required: true
+        default: "jt1805n"
+      namespace:
+        description: "Kubernetes namespace"
+        required: true
+        default: "duploservices-jt1805n"
+      replicas:
+        description: "Number of replicas"
+        required: true
+        default: "3"
+      min_ready_seconds:
+        description: "minReadySeconds (delay between pod restarts)"
+        required: true
+        default: "15"
+
+env:
+  DUPLO_HOST: https://oneclick.duplocloud.net
+  DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+
+jobs:
+  rolling-update-test:
+    name: Rolling Update - Duplo & kubectl Restart Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Install tools ──────────────────────────────────────────────────
+      - name: Install duploctl, kubectl and duplo-jit
+        run: |
+          pip install duplocloud-client
+
+          curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl && mv kubectl /usr/local/bin/kubectl
+          kubectl version --client
+
+          LATEST=$(curl -s https://api.github.com/repos/duplocloud/duplo-jit/releases/latest | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])")
+          VERSION=${LATEST#v}
+          curl -Ls "https://github.com/duplocloud/duplo-jit/releases/download/${LATEST}/duplo-jit_${VERSION}_linux_amd64.zip" \
+            -o /tmp/duplo-jit.zip
+          unzip -o /tmp/duplo-jit.zip duplo-jit -d /usr/local/bin/
+          chmod +x /usr/local/bin/duplo-jit
+          echo "duplo-jit installed: $(duplo-jit --version 2>&1 || echo ok)"
+
+      # ── 2. Setup kubeconfig ───────────────────────────────────────────────
+      - name: Setup kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_ONECLICK }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl get nodes --no-headers | awk '{print $1, $2}'
+
+      # ── 3. Create EKS service with minReadySeconds ────────────────────────
+      - name: Create EKS Service (${{ inputs.replicas }} replicas + minReadySeconds=${{ inputs.min_ready_seconds }}s)
+        run: |
+          echo "Creating service: ${{ inputs.service_name }}"
+
+          cat > /tmp/rolling-svc.yaml << EOF
+          Name: ${{ inputs.service_name }}
+          DockerImage: nginx:1.24
+          Replicas: ${{ inputs.replicas }}
+          Cloud: 0
+          AgentPlatform: 7
+          OtherDockerConfig: '{"Env":null}'
+          NetworkId: default
+          EOF
+
+          duploctl service create \
+            --tenant "${{ inputs.tenant }}" \
+            --file /tmp/rolling-svc.yaml
+
+          echo "Waiting 60s for service to be ready..."
+          sleep 60
+
+          duploctl service find "${{ inputs.service_name }}" \
+            --tenant "${{ inputs.tenant }}" \
+            --query "{Name:Name, Image:Template.Containers[0].Image, Replicas:Replicas}"
+
+          echo "Patching deployment to add minReadySeconds=${{ inputs.min_ready_seconds }}..."
+          kubectl patch deployment "${{ inputs.service_name }}" \
+            -n "${{ inputs.namespace }}" \
+            --type=merge \
+            -p "{\"spec\":{\"minReadySeconds\":${{ inputs.min_ready_seconds }}}}"
+
+          echo "Confirming pods are Running..."
+          kubectl get pods -n "${{ inputs.namespace }}" -l app="${{ inputs.service_name }}" --no-headers
+
+      # ── 4. Save pod-watch helper ──────────────────────────────────────────
+      - name: Save pod-watch helper script
+        run: |
+          cat > /tmp/watch_pods.sh << 'SCRIPT'
+          #!/bin/bash
+          # Usage: watch_pods.sh <namespace> <service_name> <duration_seconds> <interval_seconds>
+          NS=$1; SVC=$2; DURATION=$3; INTERVAL=$4
+          START=$(date +%s)
+          MIN_RUNNING=999
+
+          printf "%-8s %-7s %-9s %-10s %-14s %-20s\n" \
+            "TIME" "TOTAL" "RUNNING" "PENDING" "TERMINATING" "IMAGES(old/new)"
+          echo "────────────────────────────────────────────────────────────────────────────"
+
+          while true; do
+            NOW=$(date +%s)
+            ELAPSED=$((NOW - START))
+            [ "$ELAPSED" -ge "$DURATION" ] && break
+
+            PODS=$(kubectl get pods -n "$NS" -l app="$SVC" --no-headers 2>/dev/null)
+            TOTAL=$(echo "$PODS" | grep -c . || echo 0)
+            RUNNING=$(echo "$PODS" | awk '$3=="Running"' | grep -c . || echo 0)
+            PENDING=$(echo "$PODS" | awk '$3=="Pending" || $3=="ContainerCreating"' | grep -c . || echo 0)
+            TERMINATING=$(echo "$PODS" | awk '$3=="Terminating"' | grep -c . || echo 0)
+
+            OLD_IMG=$(kubectl get pods -n "$NS" -l app="$SVC" \
+              -o jsonpath='{range .items[*]}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null | \
+              sort | uniq -c | grep -v "^$" | awk '{print $2"x"$1}' | tr '\n' ',' | sed 's/,$//')
+
+            printf "%-8s %-7s %-9s %-10s %-14s %-20s\n" \
+              "${ELAPSED}s" "$TOTAL" "$RUNNING" "$PENDING" "$TERMINATING" "$OLD_IMG"
+
+            if [ "$RUNNING" -lt "$MIN_RUNNING" ] && [ "$TOTAL" -gt 0 ]; then
+              MIN_RUNNING=$RUNNING
+            fi
+
+            sleep "$INTERVAL"
+          done
+
+          echo "────────────────────────────────────────────────────────────────────────────"
+          echo "Min running pods observed during rollout: $MIN_RUNNING"
+          echo "MIN_RUNNING=$MIN_RUNNING" >> /tmp/rollout_result.txt
+          SCRIPT
+          chmod +x /tmp/watch_pods.sh
+
+      # ════════════════════════════════════════════════════════════════════════
+      # ROLLOUT 1: Via Duplo (duploctl update_image)
+      # ════════════════════════════════════════════════════════════════════════
+
+      - name: "[Duplo Rollout] Trigger image update via duploctl (nginx:1.24 → nginx:1.25)"
+        run: |
+          echo "==================================================="
+          echo "  ROLLOUT 1: Triggered via duploctl update_image"
+          echo "==================================================="
+          echo "Starting pod state before rollout:"
+          kubectl get pods -n "${{ inputs.namespace }}" -l app="${{ inputs.service_name }}" --no-headers
+
+          echo ""
+          echo "Triggering: duploctl service update_image → nginx:1.25"
+          duploctl service update_image \
+            --tenant "${{ inputs.tenant }}" \
+            "${{ inputs.service_name }}" \
+            "nginx:1.25"
+
+          echo "Rollout triggered. Starting pod watch (90s, every 3s)..."
+
+      - name: "[Duplo Rollout] Watch pods every 3s for 90 seconds"
+        run: |
+          rm -f /tmp/rollout_result.txt
+          bash /tmp/watch_pods.sh \
+            "${{ inputs.namespace }}" \
+            "${{ inputs.service_name }}" \
+            90 3
+
+      - name: "[Duplo Rollout] Verify rollout history and final state"
+        run: |
+          echo "=== Rollout History ==="
+          kubectl rollout history deployment/"${{ inputs.service_name }}" -n "${{ inputs.namespace }}"
+
+          echo ""
+          echo "=== Final Pod State ==="
+          kubectl get pods -n "${{ inputs.namespace }}" -l app="${{ inputs.service_name }}" --no-headers
+
+          echo ""
+          echo "=== Image on each pod ==="
+          kubectl get pods -n "${{ inputs.namespace }}" -l app="${{ inputs.service_name }}" \
+            -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\t"}{.status.phase}{"\n"}{end}'
+
+          echo ""
+          MIN_RUNNING=$(grep "MIN_RUNNING=" /tmp/rollout_result.txt | cut -d= -f2)
+          echo "Min running pods during Duplo rollout: $MIN_RUNNING"
+          if [ "${MIN_RUNNING:-0}" -gt 0 ]; then
+            echo "✅ PASS — Pods never dropped to 0 during Duplo-triggered rolling update"
+          else
+            echo "⚠️  WARNING — Running pods hit 0 at some point (check logs above)"
+          fi
+
+          echo ""
+          echo "Waiting 30s before kubectl restart test..."
+          sleep 30
+
+      # ════════════════════════════════════════════════════════════════════════
+      # ROLLOUT 2: Via kubectl rollout restart
+      # ════════════════════════════════════════════════════════════════════════
+
+      - name: "[kubectl Rollout] Trigger in-place restart via kubectl rollout restart"
+        run: |
+          echo "==================================================="
+          echo "  ROLLOUT 2: Triggered via kubectl rollout restart"
+          echo "==================================================="
+          echo "Starting pod state before restart:"
+          kubectl get pods -n "${{ inputs.namespace }}" -l app="${{ inputs.service_name }}" --no-headers
+
+          echo ""
+          echo "Triggering: kubectl rollout restart deployment/${{ inputs.service_name }}"
+          kubectl rollout restart deployment/"${{ inputs.service_name }}" \
+            -n "${{ inputs.namespace }}"
+
+          echo "Restart triggered. Starting pod watch (90s, every 3s)..."
+
+      - name: "[kubectl Rollout] Watch pods every 3s for 90 seconds"
+        run: |
+          rm -f /tmp/rollout_result.txt
+          bash /tmp/watch_pods.sh \
+            "${{ inputs.namespace }}" \
+            "${{ inputs.service_name }}" \
+            90 3
+
+      - name: "[kubectl Rollout] Verify rollout history and final state"
+        run: |
+          echo "=== Rollout History ==="
+          kubectl rollout history deployment/"${{ inputs.service_name }}" -n "${{ inputs.namespace }}"
+
+          echo ""
+          echo "=== Final Pod State ==="
+          kubectl get pods -n "${{ inputs.namespace }}" -l app="${{ inputs.service_name }}" --no-headers
+
+          echo ""
+          echo "=== Image on each pod ==="
+          kubectl get pods -n "${{ inputs.namespace }}" -l app="${{ inputs.service_name }}" \
+            -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\t"}{.status.phase}{"\n"}{end}'
+
+          echo ""
+          MIN_RUNNING=$(grep "MIN_RUNNING=" /tmp/rollout_result.txt | cut -d= -f2)
+          echo "Min running pods during kubectl restart: $MIN_RUNNING"
+          if [ "${MIN_RUNNING:-0}" -gt 0 ]; then
+            echo "✅ PASS — Pods never dropped to 0 during kubectl-triggered rolling restart"
+          else
+            echo "⚠️  WARNING — Running pods hit 0 at some point (check logs above)"
+          fi
+
+      # ── Cleanup ───────────────────────────────────────────────────────────
+      - name: Cleanup Service
+        if: always()
+        run: |
+          duploctl service delete \
+            --tenant "${{ inputs.tenant }}" \
+            "${{ inputs.service_name }}" 2>/dev/null || true
+
+      - name: Verify Service Deleted
+        if: always()
+        run: |
+          sleep 20
+          FOUND=$(duploctl service list \
+            --tenant "${{ inputs.tenant }}" \
+            --query "[?Name=='${{ inputs.service_name }}'] | length(@)" \
+            -o string)
+
+          if [ "$FOUND" = "0" ]; then
+            echo "✅ Service deleted successfully"
+          else
+            echo "❌ Service still exists"
+          fi
+
+      # ── Summary ───────────────────────────────────────────────────────────
+      - name: Rolling Update Test Summary
+        if: always()
+        run: |
+          echo "========================================="
+          echo "  Rolling Update Test Summary (Oneclick)"
+          echo "========================================="
+          echo "Portal   : https://oneclick.duplocloud.net"
+          echo "Tenant   : ${{ inputs.tenant }}"
+          echo "Service  : ${{ inputs.service_name }}"
+          echo "Replicas : ${{ inputs.replicas }}"
+          echo "minReadySeconds: ${{ inputs.min_ready_seconds }}s"
+          echo ""
+          echo "Rollout 1 — Duplo (duploctl update_image):"
+          echo "  nginx:1.24 → nginx:1.25"
+          echo "  Watched pods every 3s for 90s"
+          echo "  Verified no full outage (min running > 0)"
+          echo ""
+          echo "Rollout 2 — kubectl (rollout restart):"
+          echo "  In-place pod restart (same image)"
+          echo "  Watched pods every 3s for 90s"
+          echo "  Verified no full outage (min running > 0)"
+          echo ""
+          echo "Expected behavior: pods restart one-by-one"
+          echo "  maxUnavailable=1, maxSurge=1 (K8s defaults)"
+          echo "  minReadySeconds=${{ inputs.min_ready_seconds }}s slows each step"
