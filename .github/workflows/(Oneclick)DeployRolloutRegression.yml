@@ -59,16 +59,18 @@ jobs:
         run: |
           for SVC in "${{ inputs.service_name }}" "${{ inputs.control_service_name }}"; do
             echo "Creating service: $SVC"
+            cat > /tmp/svc-spec.yaml << EOF
+          Name: $SVC
+          DockerImage: nginx:1.21
+          Replicas: 1
+          Cloud: 0
+          AgentPlatform: 7
+          OtherDockerConfig: '{"Env":null}'
+          NetworkId: default
+          EOF
             duploctl service create \
               --tenant "${{ inputs.tenant }}" \
-              --body "{
-                \"Name\": \"$SVC\",
-                \"DockerImage\": \"nginx:1.21\",
-                \"Replicas\": 1,
-                \"Cloud\": 0,
-                \"AgentPlatform\": 7,
-                \"NetworkId\": \"default\"
-              }"
+              --file /tmp/svc-spec.yaml
           done
 
           echo "Waiting 60s for both services to be ready..."
