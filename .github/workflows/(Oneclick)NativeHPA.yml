@@ -14,7 +14,7 @@ on:
       namespace:
         description: "Kubernetes namespace"
         required: true
-        default: "duploservices-jt1805n"
+        default: "duploservices-maja1905"
       min_replicas:
         description: "HPA min replicas"
         required: true
