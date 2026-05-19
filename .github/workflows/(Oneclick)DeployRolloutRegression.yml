@@ -137,7 +137,7 @@ jobs:
             echo "[$TEST]    Spec=$K8S_SPEC_IMG | Pod=$POD_IMG"
           fi
 
-          return $RESULT
+          exit $RESULT
           SCRIPT
           chmod +x /tmp/verify_propagation.sh
 
