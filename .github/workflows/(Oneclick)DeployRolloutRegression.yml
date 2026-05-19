@@ -1,0 +1,310 @@
+name: (Oneclick) Deploy Rollout Regression - Image Not Propagating to K8s
+
+on:
+  workflow_dispatch:
+    inputs:
+      service_name:
+        description: "Service name to test"
+        required: true
+        default: "rollout-regression-svc"
+      control_service_name:
+        description: "Control service name (should always work)"
+        required: true
+        default: "rollout-control-svc"
+      tenant:
+        description: "DuploCloud tenant name"
+        required: true
+        default: "maja1905"
+      namespace:
+        description: "Kubernetes namespace"
+        required: true
+        default: "duploservices-maja1905"
+
+env:
+  DUPLO_HOST: https://oneclick.duplocloud.net
+  DUPLO_TOKEN: ${{ secrets.DUPLO_TOKEN }}
+
+jobs:
+  deploy-rollout-regression:
+    name: Deploy Rollout Regression - K8s Image Propagation
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Install tools ──────────────────────────────────────────────────
+      - name: Install duploctl, kubectl and duplo-jit
+        run: |
+          pip install duplocloud-client
+
+          curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl && mv kubectl /usr/local/bin/kubectl
+          kubectl version --client
+
+          LATEST=$(curl -s https://api.github.com/repos/duplocloud/duplo-jit/releases/latest | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])")
+          VERSION=${LATEST#v}
+          curl -Ls "https://github.com/duplocloud/duplo-jit/releases/download/${LATEST}/duplo-jit_${VERSION}_linux_amd64.zip" \
+            -o /tmp/duplo-jit.zip
+          unzip -o /tmp/duplo-jit.zip duplo-jit -d /usr/local/bin/
+          chmod +x /usr/local/bin/duplo-jit
+
+      # ── 2. Setup kubeconfig ───────────────────────────────────────────────
+      - name: Setup kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_ONECLICK }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl get nodes --no-headers | awk '{print $1, $2}'
+
+      # ── 3. Create test + control services ────────────────────────────────
+      - name: Create test and control services (initial image nginx:1.21)
+        run: |
+          for SVC in "${{ inputs.service_name }}" "${{ inputs.control_service_name }}"; do
+            echo "Creating service: $SVC"
+            duploctl service create \
+              --tenant "${{ inputs.tenant }}" \
+              --body "{
+                \"Name\": \"$SVC\",
+                \"DockerImage\": \"nginx:1.21\",
+                \"Replicas\": 1,
+                \"Cloud\": 0,
+                \"AgentPlatform\": 7,
+                \"NetworkId\": \"default\"
+              }"
+          done
+
+          echo "Waiting 60s for both services to be ready..."
+          sleep 60
+
+          for SVC in "${{ inputs.service_name }}" "${{ inputs.control_service_name }}"; do
+            IMG=$(kubectl get deployment "$SVC" -n "${{ inputs.namespace }}" \
+              -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)
+            echo "[$SVC] Initial K8s image: $IMG"
+          done
+
+      # ── 4. Save propagation checker ───────────────────────────────────────
+      - name: Save propagation check helper
+        run: |
+          cat > /tmp/verify_propagation.sh << 'SCRIPT'
+          #!/bin/bash
+          # Usage: verify_propagation.sh <svc> <tenant> <namespace> <expected_image> <test_id>
+          SVC=$1; TENANT=$2; NS=$3; EXPECTED=$4; TEST=$5
+          RESULT=0
+
+          echo ""
+          echo "[$TEST] Checking propagation for $SVC → $EXPECTED"
+          echo "[$TEST] Waiting 90s for K8s propagation..."
+          sleep 90
+
+          # Check DuploCloud metadata (timestamp + image)
+          DUPLO_IMG=$(duploctl service find "$SVC" \
+            --tenant "$TENANT" \
+            --query "Template.Containers[0].Image" -o string 2>/dev/null)
+
+          LAST_DEPLOYED=$(duploctl service find "$SVC" \
+            --tenant "$TENANT" \
+            --query "LastDeployedAt" -o string 2>/dev/null || echo "N/A")
+
+          # Check K8s deployment spec
+          K8S_SPEC_IMG=$(kubectl get deployment "$SVC" -n "$NS" \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)
+
+          # Check actual running pod image
+          POD_IMG=$(kubectl get pods -n "$NS" -l "app=$SVC" \
+            -o jsonpath='{.items[0].spec.containers[0].image}' 2>/dev/null)
+
+          echo "[$TEST] Expected image   : $EXPECTED"
+          echo "[$TEST] Duplo DB image   : $DUPLO_IMG"
+          echo "[$TEST] Duplo LastDeploy : $LAST_DEPLOYED"
+          echo "[$TEST] K8s spec image   : $K8S_SPEC_IMG"
+          echo "[$TEST] Pod actual image : $POD_IMG"
+
+          # Detect the specific bug: Duplo updated but K8s not patched
+          if [ "$DUPLO_IMG" = "$EXPECTED" ] && [ "$K8S_SPEC_IMG" != "$EXPECTED" ]; then
+            echo "[$TEST] ❌ BUG REPRODUCED — Duplo metadata updated but K8s spec NOT patched!"
+            echo "[$TEST]    This matches tickets #44612 and #44618"
+            RESULT=1
+          elif [ "$DUPLO_IMG" = "$EXPECTED" ] && [ "$K8S_SPEC_IMG" = "$EXPECTED" ]; then
+            echo "[$TEST] ✅ PASS — Duplo and K8s spec both updated correctly"
+          elif [ "$DUPLO_IMG" != "$EXPECTED" ]; then
+            echo "[$TEST] ⚠️  WARN — Duplo not updated yet (Expected=$EXPECTED Duplo=$DUPLO_IMG)"
+            RESULT=1
+          fi
+
+          # Additional check: pod vs spec mismatch (rollout in progress or stuck)
+          if [ "$K8S_SPEC_IMG" != "$POD_IMG" ]; then
+            echo "[$TEST] ⚠️  WARN — K8s spec and running pod image differ (rollout in progress or stuck)"
+            echo "[$TEST]    Spec=$K8S_SPEC_IMG | Pod=$POD_IMG"
+          fi
+
+          return $RESULT
+          SCRIPT
+          chmod +x /tmp/verify_propagation.sh
+
+      # ── TEST-01: Dynamic image tag (git SHA + timestamp format) ───────────
+      - name: "TEST-01: Deploy dynamic image tag (SHA+timestamp format)"
+        run: |
+          echo "=== TEST-01: Dynamic tag simulating real CI deploy ==="
+          # Simulate git SHA + timestamp tag format used by ScreenSteps/Cofi
+          DYNAMIC_TAG="nginx:sha-$(echo $GITHUB_SHA | cut -c1-7)-$(date +%Y%m%d%H%M%S)"
+          # Use a real pullable image with dynamic-style tag format
+          DEPLOY_IMAGE="nginx:1.25"
+          echo "Simulated dynamic tag: $DYNAMIC_TAG (using $DEPLOY_IMAGE for pullability)"
+
+          duploctl service update_image \
+            --tenant "${{ inputs.tenant }}" \
+            "${{ inputs.service_name }}" "$DEPLOY_IMAGE"
+
+          bash /tmp/verify_propagation.sh \
+            "${{ inputs.service_name }}" "${{ inputs.tenant }}" "${{ inputs.namespace }}" \
+            "$DEPLOY_IMAGE" "TEST-01"
+
+      # ── TEST-02: Verify control service deploys fine (same tenant) ─────────
+      - name: "TEST-02: Control service deploys fine in same tenant"
+        run: |
+          echo "=== TEST-02: Control service deploy in same tenant ==="
+          duploctl service update_image \
+            --tenant "${{ inputs.tenant }}" \
+            "${{ inputs.control_service_name }}" "nginx:1.25"
+
+          bash /tmp/verify_propagation.sh \
+            "${{ inputs.control_service_name }}" "${{ inputs.tenant }}" "${{ inputs.namespace }}" \
+            "nginx:1.25" "TEST-02-CONTROL"
+
+      # ── TEST-03: kubectl rollout restart does NOT fix stale image ──────────
+      - name: "TEST-03: Verify kubectl rollout restart uses spec image (not re-pull)"
+        run: |
+          echo "=== TEST-03: kubectl rollout restart behavior ==="
+
+          # Deploy a new image first
+          duploctl service update_image \
+            --tenant "${{ inputs.tenant }}" \
+            "${{ inputs.service_name }}" "nginx:1.26"
+          sleep 90
+
+          K8S_SPEC_BEFORE=$(kubectl get deployment "${{ inputs.service_name }}" \
+            -n "${{ inputs.namespace }}" \
+            -o jsonpath='{.spec.template.spec.containers[0].image}')
+          echo "[TEST-03] K8s spec before restart: $K8S_SPEC_BEFORE"
+
+          echo "Triggering kubectl rollout restart..."
+          kubectl rollout restart deployment/"${{ inputs.service_name }}" \
+            -n "${{ inputs.namespace }}"
+          sleep 45
+
+          POD_IMG_AFTER=$(kubectl get pods -n "${{ inputs.namespace }}" \
+            -l "app=${{ inputs.service_name }}" \
+            -o jsonpath='{.items[0].spec.containers[0].image}' 2>/dev/null)
+          echo "[TEST-03] Pod image after restart: $POD_IMG_AFTER"
+
+          if [ "$POD_IMG_AFTER" = "$K8S_SPEC_BEFORE" ]; then
+            echo "[TEST-03] ✅ CONFIRMED — rollout restart uses spec image (pods still on spec image)"
+            echo "[TEST-03]    If spec is stale, restart does NOT fix the issue (matches customer report)"
+          else
+            echo "[TEST-03] ⚠️  Unexpected — pod image differs from spec after restart"
+          fi
+
+      # ── TEST-04: Rapid successive deploys with dynamic tags ───────────────
+      - name: "TEST-04: Rapid successive deploys with dynamic-style tags"
+        run: |
+          echo "=== TEST-04: Rapid successive deploys ==="
+          IMAGES=("nginx:1.21" "nginx:1.22" "nginx:1.23" "nginx:1.24" "nginx:1.25" "nginx:1.26")
+
+          for IMG in "${IMAGES[@]}"; do
+            echo "Deploying $IMG..."
+            duploctl service update_image \
+              --tenant "${{ inputs.tenant }}" \
+              "${{ inputs.service_name }}" "$IMG"
+            sleep 5
+          done
+
+          FINAL_IMAGE="nginx:1.26"
+          bash /tmp/verify_propagation.sh \
+            "${{ inputs.service_name }}" "${{ inputs.tenant }}" "${{ inputs.namespace }}" \
+            "$FINAL_IMAGE" "TEST-04"
+
+      # ── TEST-05: Deploy same image tag twice (no-op scenario) ─────────────
+      - name: "TEST-05: Re-deploy same image tag (no-op detection)"
+        run: |
+          echo "=== TEST-05: Re-deploy same tag ==="
+          CURRENT_IMG=$(kubectl get deployment "${{ inputs.service_name }}" \
+            -n "${{ inputs.namespace }}" \
+            -o jsonpath='{.spec.template.spec.containers[0].image}')
+          echo "Current image: $CURRENT_IMG"
+
+          echo "Re-deploying same image: $CURRENT_IMG"
+          duploctl service update_image \
+            --tenant "${{ inputs.tenant }}" \
+            "${{ inputs.service_name }}" "$CURRENT_IMG"
+
+          bash /tmp/verify_propagation.sh \
+            "${{ inputs.service_name }}" "${{ inputs.tenant }}" "${{ inputs.namespace }}" \
+            "$CURRENT_IMG" "TEST-05"
+
+      # ── TEST-06: kubectl set image workaround verification ─────────────────
+      - name: "TEST-06: Verify kubectl set image works as workaround"
+        run: |
+          echo "=== TEST-06: kubectl set image workaround ==="
+          WORKAROUND_IMAGE="nginx:stable"
+
+          echo "Applying via kubectl set image directly..."
+          kubectl set image deployment/"${{ inputs.service_name }}" \
+            "${{ inputs.service_name }}"="$WORKAROUND_IMAGE" \
+            -n "${{ inputs.namespace }}"
+          sleep 30
+
+          K8S_IMG=$(kubectl get deployment "${{ inputs.service_name }}" \
+            -n "${{ inputs.namespace }}" \
+            -o jsonpath='{.spec.template.spec.containers[0].image}')
+
+          if [ "$K8S_IMG" = "$WORKAROUND_IMAGE" ]; then
+            echo "[TEST-06] ✅ kubectl set image workaround works — K8s spec updated to $K8S_IMG"
+          else
+            echo "[TEST-06] ❌ kubectl set image failed — K8s spec=$K8S_IMG"
+            exit 1
+          fi
+
+      # ── 5. Cleanup ────────────────────────────────────────────────────────
+      - name: Cleanup services
+        if: always()
+        run: |
+          for SVC in "${{ inputs.service_name }}" "${{ inputs.control_service_name }}"; do
+            echo "Deleting service: $SVC"
+            duploctl service delete \
+              --tenant "${{ inputs.tenant }}" \
+              "$SVC" 2>/dev/null || true
+          done
+          sleep 30
+
+      - name: Verify services deleted
+        if: always()
+        run: |
+          for SVC in "${{ inputs.service_name }}" "${{ inputs.control_service_name }}"; do
+            STATUS=$(duploctl service find "$SVC" \
+              --tenant "${{ inputs.tenant }}" \
+              --query "Name" -o string 2>/dev/null || echo "deleted")
+            echo "[$SVC] Status: $STATUS"
+          done
+
+      # ── 6. Summary ────────────────────────────────────────────────────────
+      - name: Regression Test Summary
+        if: always()
+        run: |
+          echo "======================================================"
+          echo "  Deploy Rollout Regression Summary"
+          echo "  Tickets: #44612 (ScreenSteps) / #44618 (Cofi)"
+          echo "======================================================"
+          echo "Host      : https://oneclick.duplocloud.net"
+          echo "Tenant    : ${{ inputs.tenant }}"
+          echo "Service   : ${{ inputs.service_name }}"
+          echo "Control   : ${{ inputs.control_service_name }}"
+          echo ""
+          echo "Tests:"
+          echo "  TEST-01: Dynamic tag (SHA+timestamp) deploy"
+          echo "  TEST-02: Control service in same tenant"
+          echo "  TEST-03: kubectl rollout restart behavior"
+          echo "  TEST-04: Rapid successive deploys"
+          echo "  TEST-05: Re-deploy same image tag"
+          echo "  TEST-06: kubectl set image workaround"
+          echo ""
+          echo "Bug pattern:"
+          echo "  ❌ Duplo DB updated (Last Deployed At / image)"
+          echo "     but K8s deployment spec NOT patched → pods stay on old image"
