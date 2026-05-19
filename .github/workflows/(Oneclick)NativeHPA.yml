@@ -10,7 +10,7 @@ on:
       tenant:
         description: "DuploCloud tenant name"
         required: true
-        default: "jt1805n"
+        default: "maja1905"
       namespace:
         description: "Kubernetes namespace"
         required: true
